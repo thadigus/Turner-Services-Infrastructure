@@ -1,0 +1,23 @@
+########################################
+## /deployment/deploy-turnerans_svc.yml ##
+########################################
+#
+# Playbook to install the Ansible Service
+# account on remote machine 
+
+---
+- name: Deploy Ansible Service Account
+  hosts: all
+  roles:
+    - { role: deploy-turnerans_svc }
+
+- name: Test Ansible Service Account
+  hosts: all
+  become: yes
+  vars:
+    remote_user: turnerans_svc
+    ansible_ssh_private_key_file: ../../../turner-services-sensitive-repo/id_rsa
+    become_user: turnerans_svc
+  tasks:
+    - name: Ping test to ensure functionality and permissions.
+      ping:

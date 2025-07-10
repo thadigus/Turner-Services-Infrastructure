@@ -1,0 +1,37 @@
+#############################################
+## /roles/linux-base-config/tasks/main.yml ##
+#############################################
+#
+# Role for all Linux base configuration.
+
+---
+- name: Create turneradmin user
+  user:
+    name: turneradmin
+    state: present
+    generate_ssh_key: no
+    ssh_key_bits: 2048
+    home: /home/turneradmin
+
+- name: Create .ssh folder for turneradmin account user
+  file:
+    path: /home/turneradmin/.ssh/
+    state: directory
+    owner: turneradmin
+    group: turneradmin
+    mode: '0700'
+
+- name: Deploy Public Key to authorized_keys File
+  copy:
+    src: turneradmin_id_rsa.pub
+    dest: /home/turneradmin/.ssh/authorized_keys
+    owner: turneradmin
+    group: turneradmin
+    mode: '0600'
+
+- name: Grant turneradmin Sudo Permissions
+  lineinfile:
+    path: /etc/sudoers
+    state: present
+    line: 'turneradmin ALL=(ALL) ALL'
+    validate: 'visudo -cf %s'

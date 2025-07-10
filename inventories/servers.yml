@@ -1,0 +1,51 @@
+---
+all:
+  children:
+    server_management:
+      children:
+        ilo:
+          hosts:
+            # HP Proliant DL380 G7 iLO
+            hp_dl380_ilo:
+            # 10.0.2.8
+        idrac:
+          hosts:
+            # Dell PowerEdge T330
+            poweredge_idrac_1:
+            # Dell PowerEdge T330
+            poweredge_idrac_2:
+        ipmi:
+          hosts:
+            # Chenbro NR12000 IPMI
+            chenbro_ipmi:
+    esxi_hosts:
+      children:
+        hp_servers:
+          hosts:
+            # HP Proliant DL380 G7 ESXi Management
+            esxi-host1:
+        optimus_cluster:
+          hosts:
+            # Dell Optiplex 9020 ESXi Management
+            esxi-host2:
+            # Dell Optiplex 7020 ESXi Management
+            esxi-host3:
+            # Dell Optiplex 7020 ESXi Management
+            esxi-host4:
+        poweredge_servers:
+            # Dell PowerEdge T330 ESXi Management
+            esxi-host5:
+            # Dell PowerEdge T330 ESXi Management
+            esxi-host6:
+    nas:
+      hosts:
+        # TrueNAS Chenbro Server
+        truenas:
+        # Netgear ReadyNAS 1500
+        readynas:
+    workstations:
+      hosts:
+        # Custom Rack Mounted Workstation
+        rack_workstation:
+        # Macbook Pro A1278
+        rackbookpro:

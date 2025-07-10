@@ -1,0 +1,13 @@
+###########################################
+## /deployment/windows-packer-config.yml ##
+###########################################
+#
+# Ansible playbook to be ran against hosts after Packer provisioning.
+
+---
+- hosts: all
+  gather_facts: yes
+  become: yes
+  roles:
+    - { role: deploy-turnerans_svc }
+    - { role: windows-base-config }

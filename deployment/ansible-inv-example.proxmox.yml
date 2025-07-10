@@ -1,0 +1,22 @@
+#################################################
+## /deployment/ansible-inv-example.proxmox.yml ##
+#################################################
+#
+# Here is an example of a Proxmox dynamic inventory. This is used to run playbooks against VMs. It is also used as a variable file that is imported for credentials for Proxmox API calls.
+# 
+# Proxmox Dynamic Inventory Configuration
+plugin: community.general.proxmox
+url: https://x.x.x.x:8006
+user: "root@pam"
+token_id: "APIKEYNAME"
+token_secret: "SENSITIVETOKENSECRET"
+validate_certs: false
+use_extra_vars: true
+want_facts: true
+keyed_groups:
+  - key: proxmox_tags_parsed
+    separator: ""
+    prefix: tag_
+compose:
+  ansible_host: proxmox_net0["ip"].split('/')[0] if 'ip' in proxmox_net0 else proxmox_agent_interfaces[1]["ip-addresses"][0].split('/')[0] # 
+want_proxmox_nodes_ansible_host: true

@@ -1,0 +1,58 @@
+####################################################
+## /roles/deploy-turnerans_svc.yml/tasks/main.yml ##
+####################################################
+#
+# This role is used to deploy the Ansible service account on servers
+# that have not had it installed. This is intended for use during the
+# provisioning process as it should not be required to run a second time.
+
+- name: Gather Machine Information
+  setup:
+
+- name: Block - Linux turnerans_svc Install Process
+  block:
+    - name: Ensure that sudo is installed
+      package:
+        name: sudo
+        state: present
+    - name: Grant turnerans_svc user sudo all no pass permissions
+      lineinfile:
+        path: /etc/sudoers
+        state: present
+        line: 'turnerans_svc ALL=(ALL) NOPASSWD: ALL'
+        validate: 'visudo -cf %s'
+    - name: Create turnerans_svc User
+      user:
+        name: turnerans_svc
+        password: '!'
+        generate_ssh_key: no
+        ssh_key_bits: 2048
+        password_lock: true
+        home: /home/turnerans_svc
+        state: present
+    - name: Create .ssh folder for Service Account User
+      file:
+        path: /home/turnerans_svc/.ssh/
+        state: directory
+        owner: turnerans_svc
+        group: turnerans_svc
+        mode: '0700'
+    - name: Deploy public key into authroized keys
+      copy:
+        src: turnerans_svc_id_rsa.pub
+        dest: /home/turnerans_svc/.ssh/authorized_keys
+        owner: turnerans_svc
+        group: turnerans_svc
+        mode: '0600'
+  when: ansible_os_family != 'Windows'
+
+- name: Block - Windows turnerans_svc Install Process
+  block:
+    - name: Create turnerans_svc User account
+      win_user:
+        name: turnerans_svc
+        password: '{{ win_turnerans_svc_passwd }}'
+        state: present
+        groups:
+          - Administrators
+  when: ansible_os_family == 'Windows'

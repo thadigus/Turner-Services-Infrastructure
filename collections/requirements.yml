@@ -1,0 +1,10 @@
+###################################
+## /collections/requirements.yml ##
+###################################
+#
+# Requirements file for collections to use the project.
+---
+collections:
+  - name: community.general
+    #version: 1.0.0
+

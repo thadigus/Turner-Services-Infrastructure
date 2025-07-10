@@ -1,0 +1,40 @@
+all:
+  infrastructure:
+    vlan100:
+      longname: 'Parents Network'
+    vlan101:
+      longname: 'Native Traffic'
+    vlan102:
+      longname: 'Management'
+    vlan103:
+      longname: 'Network Devices'
+    vlan104:
+      longname: 'OOBM - Out Of Band Management Interfaces (iLO iDRAC IPMI)'
+    vlan105:
+      longname: 'ESXi/vSphere Management'
+    vlan106:
+      longname: 'vMotion'
+    vlan107:
+      longname: 'PXE'
+    vlan108:
+      longname: 'SAN FCoE'
+    vlan109:
+      longname: 'SAN Management'
+  networkaccess:
+    vlan110:
+      longname: 'Admin VPN'
+    vlan111:
+      longname: 'Client VPN'
+    vlan112:
+      longname: 'Site to Site VPN'
+    vlan113:
+      longname: 'On-Site Clients'
+    vlan114:
+      longname: 'On-Site Admin'
+  services:
+    vlan115:
+      longname: 'GitLab Runners'
+    vlan116:
+      longname: 'Development Servers'
+    vlan117:
+      longname: 'Nextcloud Environment'

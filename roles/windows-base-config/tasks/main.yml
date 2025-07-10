@@ -1,0 +1,15 @@
+###############################################
+## /roles/windows-base-config/tasks/main.yml ##
+###############################################
+#
+# Role for all Windows base configuration.
+
+---
+- name: Create turneradmin User
+  win_user:
+    name: turneradmin
+    password: '{{ win_turneradmin_passwd }}'
+    state: present
+    groups:
+      - Administrators
+

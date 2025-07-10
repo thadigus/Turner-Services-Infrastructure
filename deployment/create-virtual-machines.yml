@@ -1,0 +1,97 @@
+############################################
+## deployment/create-virtual-machines.yml ##
+############################################
+#
+# Creation playbook for all virtual machines to use parameter file and implement VMs from templates generated with Packer
+# ansible-playbook --extra-vars @./turner-services-sensitive-repo/server-list-rack.yml --extra-vars @./turner-services-sensitive-repo/ansible-inv-rack.proxmox.yml ./deployment/create-virtual-machines.yml 
+# ansible-playbook --extra-vars @./turner-services-sensitive-repo/server-list-office.yml --extra-vars @./turner-services-sensitive-repo/ansible-inv-office.proxmox.yml ./deployment/create-virtual-machines.yml
+---
+- name: All - Preflight Dependencies with Pip and Importing Server List
+  hosts: localhost
+  tasks:
+    - pip:
+        name: '{{ item }}'
+      run_once: true
+      loop:
+        - proxmoxer
+        - requests
+
+- name: Create Virtual Machines from Templates and Update if Already Created 
+  hosts: localhost
+  tasks:
+    - name: Create Virtual Machines Cloned from Templates 
+      proxmox_kvm:
+        node: '{{ template_node }}'
+        api_user: '{{ user }}' 
+        api_token_id: '{{ token_id }}' 
+        api_token_secret: '{{ token_secret }}' 
+        api_host: '{{ template_node }}'
+        name: '{{ item.name }}'
+        clone: '{{ item.template_name }}'
+        cores: '{{ item.cpu_count }}'
+        memory: '{{ item.ram_amount }}'
+        storage: '{{ item.storage_location }}'
+        onboot: '{{ item.start_on_boot }}'
+        timeout: 600
+      when: item.template_name is defined and item.vm_state == "present"
+      loop: '{{ virtual_machines }}'
+    - name: Create Virtual Machines Without Templates 
+      proxmox_kvm:
+        node: '{{ item.prox_node }}'
+        api_user: '{{ user }}' 
+        api_token_id: '{{ token_id }}' 
+        api_token_secret: '{{ token_secret }}' 
+        api_host: '{{ item.prox_node }}'
+        name: '{{ item.name }}'
+        cores: '{{ item.cpu_count }}'
+        memory: '{{ item.ram_amount }}'
+        storage: '{{ item.storage_location }}'
+        scsihw: 'virtio-scsi-pci'
+        onboot: '{{ item.start_on_boot }}'
+        sata:
+          sata0: '{{ item.iso_file }},media=cdrom'
+          sata1: '{{ item.storage_location }}:{{ item.disk_amount }},format=raw'
+        bios: ovmf
+        efidisk0:
+          storage: '{{ item.storage_location }}'
+          format: raw
+          efitype: 4m
+          pre_enrolled_keys: false
+        tpmstate0:
+          storage: '{{ item.storage_location }}'
+          version: '2.0'
+        timeout: 600
+      when: item.template_name is undefined and item.vm_state == "present"
+      loop: '{{ virtual_machines }}' 
+    - name: Update Specifications of Current VMs 
+      proxmox_kvm:
+        node: '{{ item.prox_node }}'
+        api_user: '{{ user }}' 
+        api_token_id: '{{ token_id }}' 
+        api_token_secret: '{{ token_secret }}' 
+        api_host: '{{ item.prox_node }}'
+        name: '{{ item.name }}'
+        state: '{{ item.vm_state }}'
+        cores: '{{ item.cpu_count }}'
+        memory: '{{ item.ram_amount }}'
+        storage: '{{ item.storage_location }}'
+        onboot: '{{ item.start_on_boot }}'
+        update: true
+        migrate: true
+        timeout: 600
+      when: item.vm_state == "present"
+      loop: '{{ virtual_machines }}'
+    - name: Delete Absent VMs 
+      proxmox_kvm:
+        node: '{{ item.prox_node }}'
+        api_user: '{{ user }}' 
+        api_token_id: '{{ token_id }}' 
+        api_token_secret: '{{ token_secret }}' 
+        api_host: '{{ item.prox_node }}'
+        name: '{{ item.name }}'
+        state: '{{ item.vm_state }}'
+        force: true
+        timeout: 600
+      when: item.vm_state == "absent"
+      loop: '{{ virtual_machines }}'
+
