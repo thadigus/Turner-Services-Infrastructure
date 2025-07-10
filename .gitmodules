@@ -1,0 +1,15 @@
+[submodule "images/windows-image-build-packer-on-proxmox"]
+	path = images/windows-image-build-packer-on-proxmox
+	url = git@github.com:thadigus/windows-image-build-packer-on-proxmox.git
+[submodule "images/rhel-image-build-packer-on-proxmox"]
+	path = images/rhel-image-build-packer-on-proxmox
+	url = git@github.com:thadigus/rhel-image-build-packer-on-proxmox.git
+[submodule "images/ubuntu-image-build-packer-on-proxmox"]
+	path = images/ubuntu-image-build-packer-on-proxmox
+	url = git@github.com:thadigus/ubuntu-image-build-packer-on-proxmox.git
+[submodule "images/kali-image-build-packer-on-proxmox"]
+	path = images/kali-image-build-packer-on-proxmox
+	url = git@github.com:thadigus/kali-image-build-packer-on-proxmox.git
+[submodule "turner-services-sensitive-repo"]
+	path = turner-services-sensitive-repo
+	url = git@github.com:thadigus/turner-services-sensitive-repo.git
