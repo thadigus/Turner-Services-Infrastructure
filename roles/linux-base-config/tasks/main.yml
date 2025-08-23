@@ -16,6 +16,9 @@
     generate_ssh_key: no
     ssh_key_bits: 2048
     home: /home/turneradmin
+    append: true
+    groups: sudo
+    shell: /bin/bash
 
 - name: Create .ssh folder for turneradmin account user
   file:
@@ -40,18 +43,6 @@
     line: 'turneradmin ALL=(ALL) ALL'
     validate: 'visudo -cf %s'
 
-- name: Apt Install ssh-import-gh
-  apt:
-    name: ssh-import-id
-    state: present
-
-- name: Add authorized keys from GH
-  shell: ssh-import-id-gh 'thadigus'
-  become: true
-  become_user: turneradmin
-  become_method: sudo 
-  become_flags: "-i"
-
 - name: Ensure libpam-ssh-agent-auth is installed
   apt:
     name: libpam-ssh-agent-auth
@@ -66,25 +57,29 @@
     group: root
     mode: "0755"
 
-- name: Fetch GitHub public keys for each account
+- name: Fetch GitHub public keys for Thadigus
   uri:
     url: "https://github.com/thadigus.keys"
     return_content: true
     status_code: 200
   register: gh_keys
 
-- name: Build combined authorized_keys content
-  set_fact:
-    combined_authorized_keys: "{{ gh_keys.results | map(attribute='content') | list | join('\n') | regex_replace('\\n+', '\n') | trim }}"
-
 - name: Install /etc/security/authorized_keys with GitHub keys
   copy:
     dest: /etc/security/authorized_keys
-    content: "{{ combined_authorized_keys }}\n"
+    content: "{{ gh_keys.content }}\n"
     owner: root
     group: root
     mode: "0640"
     backup: true
+
+- name: Install /home/turneradmin/.ssh/authorized_keys with GitHub keys
+  blockinfile:
+    path: /home/turneradmin/.ssh/authorized_keys
+    block: "{{ gh_keys.content }}\n"
+    owner: turneradmin
+    group: turneradmin
+    mode: "0640"
 
 - name: Ensure pam_ssh_agent_auth line exists in /etc/pam.d/sudo (after header)
   lineinfile:
@@ -122,6 +117,13 @@
   service:
     name: sshd
     state: restarted
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: Restart SSH
+  service:
+    name: ssh
+    state: restarted
+  when: ansible_facts['os_family'] == "Ubuntu"
     
 - name: Crontab for automatic updates and reboot @ 4 AM
   cron:

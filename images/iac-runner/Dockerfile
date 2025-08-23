@@ -24,8 +24,8 @@ RUN dnf -y install packer
 CMD ["/bin/bash"]
 
 # Create the turneradmin user as an administrator
-RUN groupadd turneradmin
-RUN useradd -s /bin/bash -m -g turneradmin turneradmin
+RUN groupadd -g ${GID} turneradmin
+RUN useradd -s /bin/bash -m -u ${UID} -g turneradmin turneradmin
 RUN chown turneradmin:turneradmin /workspace
 RUN echo "turneradmin ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/username
 # Prepare home and ~/.ssh
@@ -39,7 +39,7 @@ RUN printf 'Host *\n  StrictHostKeyChecking accept-new\n' > /etc/ssh/ssh_config
 
 # Create .ssh directory and config file for turneradmin
 RUN mkdir -p /home/turneradmin/.ssh \
-&& echo "Host *\n  ForwardAgent yes" > /home/turneradmin/.ssh/config \
+&& printf "Host *\n  ForwardAgent yes" > /home/turneradmin/.ssh/config \
 && chown -R turneradmin:turneradmin /home/turneradmin/.ssh \
 && chmod 700 /home/turneradmin/.ssh \
 && chmod 600 /home/turneradmin/.ssh/config
