@@ -73,6 +73,7 @@ jobs:
 
           docker exec build-runner git config --global --add safe.directory /workspace
           docker exec build-runner bash images/build-scripts/ubuntu-packer-build-rack.sh
+          docker stop build-runner
 
   rhel-packer-build:
     name: RHEL Packer Build
@@ -89,8 +90,18 @@ jobs:
           submodules: recursive
       - name: Run RHEL Packer script
         run: |
-          git config --global --add safe.directory /__w/Turner-Services-Infrastructure/Turner-Services-Infrastructure
-          bash images/build-scripts/rhel-packer-build-rack.sh
+          docker run --rm -d \
+          --name build-runner \
+          --network host \
+          --user root \
+          -v "$PWD":/workspace \
+          -w /workspace \
+          ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
+          sleep infinity
+
+          docker exec build-runner git config --global --add safe.directory /workspace
+          docker exec build-runner bash images/build-scripts/rhel-packer-build-rack.sh
+          docker stop build-runner
 
   windows-packer-build:
     name: Windows Packer Build
@@ -106,9 +117,19 @@ jobs:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
       - name: Run Windows Packer script
-        run: |
-          git config --global --add safe.directory /__w/Turner-Services-Infrastructure/Turner-Services-Infrastructure
-          bash images/build-scripts/windows-packer-build-rack.sh
+        run: 
+          docker run --rm -d \
+          --name build-runner \
+          --network host \
+          --user root \
+          -v "$PWD":/workspace \
+          -w /workspace \
+          ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
+          sleep infinity
+
+          docker exec build-runner git config --global --add safe.directory /workspace
+          docker exec build-runner bash images/build-scripts/windows-packer-build-rack.sh
+          docker stop build-runner
 
   kali-packer-build:
     name: Kali Packer Build
@@ -124,6 +145,16 @@ jobs:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
       - name: Run Kali Packer script
-        run: |
-          git config --global --add safe.directory /__w/Turner-Services-Infrastructure/Turner-Services-Infrastructure
-          bash images/build-scripts/kali-packer-build-rack.sh
+        run: 
+          docker run --rm -d \
+          --name build-runner \
+          --network host \
+          --user root \
+          -v "$PWD":/workspace \
+          -w /workspace \
+          ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
+          sleep infinity
+
+          docker exec build-runner git config --global --add safe.directory /workspace
+          docker exec build-runner bash images/build-scripts/kali-packer-build-rack.sh
+          docker stop build-runner
