@@ -27,7 +27,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: .devcontainer/Dockerfile
+          file: images/iac-runner/Dockerfile
           push: true
           tags: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
 
