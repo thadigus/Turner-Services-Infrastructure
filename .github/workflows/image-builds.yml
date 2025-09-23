@@ -71,7 +71,7 @@ jobs:
           ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
           sleep infinity
 
-          docker exec build-runner git config --global --add safe.directory /__w/Turner-Services-Infrastructure/Turner-Services-Infrastructure
+          docker exec build-runner git config --global --add safe.directory /workspace
           docker exec build-runner bash images/build-scripts/ubuntu-packer-build-rack.sh
 
   rhel-packer-build:
