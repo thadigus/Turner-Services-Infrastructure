@@ -41,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run download script
-        run: bash images/download-isos.sh
+        run: ansible-playbook images/download-isos.yml
 
   ubuntu-packer-build:
     name: Ubuntu Packer Build
@@ -49,6 +49,7 @@ jobs:
     needs: download-isos
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --user root
     steps:
       - uses: actions/checkout@v4
       - name: Run Ubuntu Packer script
@@ -60,6 +61,7 @@ jobs:
     needs: download-isos
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --user root
     steps:
       - uses: actions/checkout@v4
       - name: Run RHEL Packer script
@@ -71,6 +73,7 @@ jobs:
     needs: download-isos
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --user root
     steps:
       - uses: actions/checkout@v4
       - name: Run Windows Packer script
@@ -82,6 +85,7 @@ jobs:
     needs: download-isos
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --user root
     steps:
       - uses: actions/checkout@v4
       - name: Run Kali Packer script
