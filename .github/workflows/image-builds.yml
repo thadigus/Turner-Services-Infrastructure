@@ -64,7 +64,9 @@ jobs:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
       - name: Run Ubuntu Packer script
-        run: bash images/build-scripts/ubuntu-packer-build-rack.sh
+        run: |
+          git config --global --add safe.directory /__w/Turner-Services-Infrastructure/Turner-Services-Infrastructure
+          bash images/build-scripts/ubuntu-packer-build-rack.sh
 
   rhel-packer-build:
     name: RHEL Packer Build
@@ -80,7 +82,9 @@ jobs:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
       - name: Run RHEL Packer script
-        run: bash images/build-scripts/rhel-packer-build-rack.sh
+        run: |
+          git config --global --add safe.directory /__w/Turner-Services-Infrastructure/Turner-Services-Infrastructure
+          bash images/build-scripts/rhel-packer-build-rack.sh
 
   windows-packer-build:
     name: Windows Packer Build
@@ -96,7 +100,9 @@ jobs:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
       - name: Run Windows Packer script
-        run: bash images/build-scripts/windows-packer-build-rack.sh
+        run: |
+          git config --global --add safe.directory /__w/Turner-Services-Infrastructure/Turner-Services-Infrastructure
+          bash images/build-scripts/windows-packer-build-rack.sh
 
   kali-packer-build:
     name: Kali Packer Build
@@ -112,4 +118,6 @@ jobs:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
       - name: Run Kali Packer script
-        run: bash images/build-scripts/kali-packer-build-rack.sh
+        run: |
+          git config --global --add safe.directory /__w/Turner-Services-Infrastructure/Turner-Services-Infrastructure
+          bash images/build-scripts/kali-packer-build-rack.sh
