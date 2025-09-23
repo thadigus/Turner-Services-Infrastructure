@@ -9,7 +9,7 @@
 # - Windows Server Latest
 ---
 - name: Ubuntu 24.04.1 Download and Verify
-  hosts: prox2, prox4 
+  hosts: prox4 
   become: yes
   tasks:
     - name: Download Ubuntu Live Server ISO
