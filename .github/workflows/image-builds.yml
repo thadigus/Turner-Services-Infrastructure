@@ -65,8 +65,17 @@ jobs:
           submodules: recursive
       - name: Run Ubuntu Packer script
         run: |
-          git config --global --add safe.directory /__w/Turner-Services-Infrastructure/Turner-Services-Infrastructure
-          bash images/build-scripts/ubuntu-packer-build-rack.sh
+          docker run --rm -d \
+          --name build-runner \
+          --network host \
+          --user root \
+          -v "$PWD":/workspace \
+          -w /workspace \
+          ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
+          sleep infinity
+
+          docker exec build-runner git config --global --add safe.directory /__w/Turner-Services-Infrastructure/Turner-Services-Infrastructure
+          docker exec build-runner bash images/build-scripts/ubuntu-packer-build-rack.sh
 
   rhel-packer-build:
     name: RHEL Packer Build
