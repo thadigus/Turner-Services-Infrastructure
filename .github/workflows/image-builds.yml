@@ -10,7 +10,7 @@ jobs:
     name: Build DevContainer Image
     runs-on: self-hosted
     outputs:
-      image: ghcr.io/${{ toLower(github.repository) }}:devcontainer
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
     permissions:
       contents: read
       packages: write
@@ -29,14 +29,14 @@ jobs:
           context: .
           file: .devcontainer/Dockerfile
           push: true
-          tags: ghcr.io/${{ toLower(github.repository) }}:devcontainer
+          tags: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
 
   download-isos:
     name: Download ISOs
     runs-on: self-hosted
     needs: setup-container-image
     container:
-      image: ghcr.io/${{ toLower(github.repository) }}:devcontainer
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
     steps:
       - uses: actions/checkout@v4
       - name: Run download script
@@ -47,7 +47,7 @@ jobs:
     runs-on: self-hosted
     needs: download-isos
     container:
-      image: ghcr.io/${{ toLower(github.repository) }}:devcontainer
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
     steps:
       - uses: actions/checkout@v4
       - name: Run Ubuntu Packer script
@@ -58,7 +58,7 @@ jobs:
     runs-on: self-hosted
     needs: download-isos
     container:
-      image: ghcr.io/${{ toLower(github.repository) }}:devcontainer
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
     steps:
       - uses: actions/checkout@v4
       - name: Run RHEL Packer script
@@ -69,7 +69,7 @@ jobs:
     runs-on: self-hosted
     needs: download-isos
     container:
-      image: ghcr.io/${{ toLower(github.repository) }}:devcontainer
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
     steps:
       - uses: actions/checkout@v4
       - name: Run Windows Packer script
@@ -80,7 +80,7 @@ jobs:
     runs-on: self-hosted
     needs: download-isos
     container:
-      image: ghcr.io/${{ toLower(github.repository) }}:devcontainer
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
     steps:
       - uses: actions/checkout@v4
       - name: Run Kali Packer script
