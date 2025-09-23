@@ -54,9 +54,6 @@ jobs:
     name: Ubuntu Packer Build
     runs-on: self-hosted
     needs: download-isos
-    container:
-      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
-      options: --user root --network host
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
