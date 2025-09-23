@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -39,7 +41,10 @@ jobs:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
       options: --user root
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Run download script
         run: ansible-playbook images/download-isos.yml
 
@@ -51,9 +56,12 @@ jobs:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
       options: --user root
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Run Ubuntu Packer script
-        run: bash images/build-scripts/ubuntu-pakcer-build-rack.sh
+        run: bash images/build-scripts/ubuntu-packer-build-rack.sh
 
   rhel-packer-build:
     name: RHEL Packer Build
@@ -63,7 +71,10 @@ jobs:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
       options: --user root
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Run RHEL Packer script
         run: bash images/build-scripts/rhel-packer-build-rack.sh
 
@@ -75,7 +86,10 @@ jobs:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
       options: --user root
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Run Windows Packer script
         run: bash images/build-scripts/windows-packer-build-rack.sh
 
@@ -87,6 +101,9 @@ jobs:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
       options: --user root
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Run Kali Packer script
         run: bash images/build-scripts/kali-packer-build-rack.sh
