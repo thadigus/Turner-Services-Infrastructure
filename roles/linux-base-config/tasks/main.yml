@@ -9,6 +9,11 @@
   hostname:
     name: "{{ ansible_hostname }}"
 
+- name: Ensure Sudo Package is Installed
+  package:
+    name: sudo
+    state: present
+
 - name: Create turneradmin user
   user:
     name: turneradmin
