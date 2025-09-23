@@ -14,6 +14,11 @@
     name: sudo
     state: present
 
+- name: Ensure Sudo Group is present
+  group:
+    name: sudo
+    state: present
+
 - name: Create turneradmin user
   user:
     name: turneradmin
@@ -48,11 +53,18 @@
     line: 'turneradmin ALL=(ALL) ALL'
     validate: 'visudo -cf %s'
 
-- name: Ensure libpam-ssh-agent-auth is installed
+- name: Ensure libpam-ssh-agent-auth is installed - Ubuntu
   apt:
     name: libpam-ssh-agent-auth
     state: present
     update_cache: true
+  when: ansible_facts['os_family'] == "Ubuntu"
+
+- name: Ensure pam_ssh_agent_auth is installed - RHEL
+  yum:
+    name: pam_ssh_agent_auth
+    state: present
+  when: ansible_facts['os_family'] == "RedHat"
 
 - name: Ensure /etc/security exists
   file:
