@@ -37,7 +37,7 @@ jobs:
     needs: setup-container-image
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
-      options: --user 0
+      options: --user root
     steps:
       - uses: actions/checkout@v4
       - name: Run download script
