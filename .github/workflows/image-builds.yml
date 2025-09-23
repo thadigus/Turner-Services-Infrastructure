@@ -1,0 +1,87 @@
+name: Run Packer Builds and Devcontainer
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 1'  # Every Monday at 2 AM UTC → Sunday 10 PM ET
+
+jobs:
+  setup-container-image:
+    name: Build DevContainer Image
+    runs-on: self-hosted
+    outputs:
+      image: ghcr.io/${{ github.repository }}:devcontainer
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push devcontainer image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: .devcontainer/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}:devcontainer
+
+  download-isos:
+    name: Download ISOs
+    runs-on: self-hosted
+    needs: setup-container-image
+    container:
+      image: ghcr.io/${{ github.repository }}:devcontainer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run download script
+        run: bash images/download-isos.sh
+
+  ubuntu-packer-build:
+    name: Ubuntu Packer Build
+    runs-on: self-hosted
+    needs: download-isos
+    container:
+      image: ghcr.io/${{ github.repository }}:devcontainer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Ubuntu Packer script
+        run: bash images/build-scripts/ubuntu-pakcer-build-rack.sh
+
+  rhel-packer-build:
+    name: RHEL Packer Build
+    runs-on: self-hosted
+    needs: download-isos
+    container:
+      image: ghcr.io/${{ github.repository }}:devcontainer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run RHEL Packer script
+        run: bash images/build-scripts/rhel-packer-build-rack.sh
+
+  windows-packer-build:
+    name: Windows Packer Build
+    runs-on: self-hosted
+    needs: download-isos
+    container:
+      image: ghcr.io/${{ github.repository }}:devcontainer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Windows Packer script
+        run: bash images/build-scripts/windows-packer-build-rack.sh
+
+  kali-packer-build:
+    name: Kali Packer Build
+    runs-on: self-hosted
+    needs: download-isos
+    container:
+      image: ghcr.io/${{ github.repository }}:devcontainer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Kali Packer script
+        run: bash images/build-scripts/kali-packer-build-rack.sh
