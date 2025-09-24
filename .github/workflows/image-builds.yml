@@ -63,7 +63,6 @@ jobs:
       - name: Run Ubuntu Packer script
         run: |
           docker run --rm \
-          --name build-runner \
           --network host \
           --user root \
           -v "$PWD":/workspace \
@@ -84,7 +83,6 @@ jobs:
       - name: Run RHEL Packer script
         run: |
           docker run --rm \
-          --name build-runner \
           --network host \
           --user root \
           -v "$PWD":/workspace \
@@ -105,7 +103,6 @@ jobs:
       - name: Run Windows Packer script
         run: |
           docker run --rm \
-          --name build-runner \
           --network host \
           --user root \
           -v "$PWD":/workspace \
@@ -126,7 +123,6 @@ jobs:
       - name: Run Kali Packer script
         run: |
           docker run --rm \
-          --name build-runner \
           --network host \
           --user root \
           -v "$PWD":/workspace \
