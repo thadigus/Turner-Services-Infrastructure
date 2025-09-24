@@ -69,11 +69,7 @@ jobs:
           -v "$PWD":/workspace \
           -w /workspace \
           ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-          sleep infinity
-
-          docker exec build-runner git config --global --add safe.directory /workspace
-          docker exec build-runner bash images/build-scripts/ubuntu-packer-build-rack.sh
-          docker stop build-runner
+          bash images/build-scripts/ubuntu-packer-build-rack.sh
 
   rhel-packer-build:
     name: RHEL Packer Build
@@ -94,11 +90,7 @@ jobs:
           -v "$PWD":/workspace \
           -w /workspace \
           ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-          sleep infinity
-
-          docker exec build-runner git config --global --add safe.directory /workspace
-          docker exec build-runner bash images/build-scripts/rhel-packer-build-rack.sh
-          docker stop build-runner
+          bash images/build-scripts/rhel-packer-build-rack.sh
 
   windows-packer-build:
     name: Windows Packer Build
@@ -119,11 +111,7 @@ jobs:
           -v "$PWD":/workspace \
           -w /workspace \
           ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-          sleep infinity
-
-          docker exec build-runner git config --global --add safe.directory /workspace
-          docker exec build-runner bash images/build-scripts/windows-packer-build-rack.sh
-          docker stop build-runner
+          bash images/build-scripts/windows-packer-build-rack.sh
 
   kali-packer-build:
     name: Kali Packer Build
@@ -144,8 +132,5 @@ jobs:
           -v "$PWD":/workspace \
           -w /workspace \
           ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-          sleep infinity
-
-          docker exec build-runner git config --global --add safe.directory /workspace
-          docker exec build-runner bash images/build-scripts/kali-packer-build-rack.sh
-          docker stop build-runner
+          bash images/build-scripts/kali-packer-build-rack.sh
+          
