@@ -62,7 +62,7 @@ jobs:
           submodules: recursive
       - name: Run Ubuntu Packer script
         run: |
-          docker run --rm -d \
+          docker run --rm \
           --name build-runner \
           --network host \
           --user root \
@@ -83,7 +83,7 @@ jobs:
           submodules: recursive
       - name: Run RHEL Packer script
         run: |
-          docker run --rm -d \
+          docker run --rm \
           --name build-runner \
           --network host \
           --user root \
@@ -104,7 +104,7 @@ jobs:
           submodules: recursive
       - name: Run Windows Packer script
         run: |
-          docker run --rm -d \
+          docker run --rm \
           --name build-runner \
           --network host \
           --user root \
@@ -125,7 +125,7 @@ jobs:
           submodules: recursive
       - name: Run Kali Packer script
         run: |
-          docker run --rm -d \
+          docker run --rm \
           --name build-runner \
           --network host \
           --user root \
