@@ -50,5 +50,8 @@ USER turneradmin
 # Configure Git
 RUN git config --global --add safe.directory /workspace
 
+# DNS Records for Proxmox
+
+
 # Launch whatever shell we end up picking...
 CMD /bin/bash
