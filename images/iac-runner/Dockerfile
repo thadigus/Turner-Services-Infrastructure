@@ -27,7 +27,7 @@ CMD ["/bin/bash"]
 RUN groupadd -g ${GID} turneradmin
 RUN useradd -s /bin/bash -m -u ${UID} -g turneradmin turneradmin
 RUN chown turneradmin:turneradmin /workspace
-RUN echo "turneradmin ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/username
+RUN echo "turneradmin ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/turneradmin
 # Prepare home and ~/.ssh
 RUN mkdir -p /home/turneradmin/.ssh \
 && chown -R turneradmin:turneradmin /home/turneradmin \
@@ -49,9 +49,6 @@ USER turneradmin
 
 # Configure Git
 RUN git config --global --add safe.directory /workspace
-
-# DNS Records for Proxmox
-
 
 # Launch whatever shell we end up picking...
 CMD /bin/bash
