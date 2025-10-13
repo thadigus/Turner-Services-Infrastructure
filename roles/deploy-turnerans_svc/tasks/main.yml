@@ -48,6 +48,14 @@
 
 - name: Block - Windows turnerans_svc Install Process
   block:
+    - name: Include Windows Variables to Assign Service Account
+      include_vars:
+        file: ../../turner-services-sensitive-repo/windows-vars.yml
+
+    - name: Debug Windows Vars
+      debug:
+        var: win_turnerans_svc_passwd
+
     - name: Create turnerans_svc User account
       win_user:
         name: turnerans_svc

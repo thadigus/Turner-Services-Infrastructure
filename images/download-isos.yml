@@ -14,27 +14,26 @@
   tasks:
     - name: Download Ubuntu Live Server ISO
       get_url:
-        url: "https://releases.ubuntu.com/24.04.2/ubuntu-24.04.2-live-server-amd64.iso"
-        checksum: "sha256:d6dab0c3a657988501b4bd76f1297c053df710e06e0c3aece60dead24f270b4d"
+        url: "https://releases.ubuntu.com/24.04.3/ubuntu-24.04.3-live-server-amd64.iso"
+        checksum: "sha256:c3514bf0056180d09376462a7a1b4f213c1d6e8ea67fae5c25099c6fd3d8274b"
         dest: "/var/lib/vz/template/iso/ubuntu-live-server.iso"
     - name: Download Kali Linux ISO
       get_url:
-        url: "https://cdimage.kali.org/kali-2025.2/kali-linux-2025.2-installer-amd64.iso"
-        checksum: "sha256:5723d46414b45575aa8e199740bbfde49e5b2501715ea999f0573e94d61e39d3"
+        url: "https://cdimage.kali.org/kali-2025.3/kali-linux-2025.3-installer-amd64.iso"
+        checksum: "sha256:fcf1999799f6642b7d6c6bd79bc1e516be7340b7203fe86c6be3ac21f693f42a"
         dest: "/var/lib/vz/template/iso/kali-linux-installer.iso"
     - name: Download OPNsense ISO
       get_url:
-        url: "https://mirrors.ocf.berkeley.edu/opnsense//releases/25.1/OPNsense-25.1-dvd-amd64.iso.bz2"
-        checksum: "sha256:68efe0e5c20bd5fbe42918f000685ec10a1756126e37ca28f187b2ad7e5889ca"
+        url: "https://pkg.opnsense.org/releases/25.7/OPNsense-25.7-dvd-amd64.iso.bz2"
+        checksum: "sha256:fa4b30df3f5fd7a2b1a1b2bdfaecfe02337ee42f77e2d0ae8a60753ea7eb153e"
         dest: "/var/lib/vz/template/iso/OPNsense-dvd-amd64.iso.bz2"
     - name: Decompress OPNsense ISO
       shell: 'bzip2 -fd /var/lib/vz/template/iso/OPNsense-dvd-amd64.iso.bz2'
     - name: Download Windows Server 2025 ISO
       get_url:
-        url: https://software-static.download.prss.microsoft.com/dbazure/888969d5-f34g-4e03-ac9d-1f9786c66749/26100.1742.240906-0331.ge_release_svc_refresh_SERVER_EVAL_x64FRE_en-us.iso
+        url: "https://software-static.download.prss.microsoft.com/dbazure/888969d5-f34g-4e03-ac9d-1f9786c66749/26100.1742.240906-0331.ge_release_svc_refresh_SERVER_EVAL_x64FRE_en-us.iso"
         dest: "/var/lib/vz/template/iso/WindowsServer2025_x64_en-us.iso"
     - name: Download VirtIO Windows Drivers
       get_url:
         url: "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
         dest: "/var/lib/vz/template/iso/virtio-win.iso"
-
