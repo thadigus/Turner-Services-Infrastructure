@@ -9,31 +9,37 @@
 # - Windows Server Latest
 ---
 - name: Ubuntu 24.04.1 Download and Verify
-  hosts: prox4 
+  hosts: optimus_cluster
   become: yes
   tasks:
     - name: Download Ubuntu Live Server ISO
       get_url:
         url: "https://releases.ubuntu.com/24.04.3/ubuntu-24.04.3-live-server-amd64.iso"
         checksum: "sha256:c3514bf0056180d09376462a7a1b4f213c1d6e8ea67fae5c25099c6fd3d8274b"
-        dest: "/var/lib/vz/template/iso/ubuntu-live-server.iso"
+        dest: "/mnt/pve/NFS-TempStorage/template/iso/ubuntu-live-server.iso"
+      run_once: true
     - name: Download Kali Linux ISO
       get_url:
         url: "https://cdimage.kali.org/kali-2025.3/kali-linux-2025.3-installer-amd64.iso"
         checksum: "sha256:fcf1999799f6642b7d6c6bd79bc1e516be7340b7203fe86c6be3ac21f693f42a"
-        dest: "/var/lib/vz/template/iso/kali-linux-installer.iso"
+        dest: "/mnt/pve/NFS-TempStorage/template/iso/kali-linux-installer.iso"
+      run_once: true
     - name: Download OPNsense ISO
       get_url:
         url: "https://pkg.opnsense.org/releases/25.7/OPNsense-25.7-dvd-amd64.iso.bz2"
         checksum: "sha256:fa4b30df3f5fd7a2b1a1b2bdfaecfe02337ee42f77e2d0ae8a60753ea7eb153e"
-        dest: "/var/lib/vz/template/iso/OPNsense-dvd-amd64.iso.bz2"
+        dest: "/mnt/pve/NFS-TempStorage/template/iso/OPNsense-dvd-amd64.iso.bz2"
+      run_once: true
     - name: Decompress OPNsense ISO
-      shell: 'bzip2 -fd /var/lib/vz/template/iso/OPNsense-dvd-amd64.iso.bz2'
+      shell: 'bzip2 -fd /mnt/pve/NFS-TempStorage/template/iso//OPNsense-dvd-amd64.iso.bz2'
+      run_once: true
     - name: Download Windows Server 2025 ISO
       get_url:
         url: "https://software-static.download.prss.microsoft.com/dbazure/888969d5-f34g-4e03-ac9d-1f9786c66749/26100.1742.240906-0331.ge_release_svc_refresh_SERVER_EVAL_x64FRE_en-us.iso"
-        dest: "/var/lib/vz/template/iso/WindowsServer2025_x64_en-us.iso"
+        dest: "/mnt/pve/NFS-TempStorage/template/iso/WindowsServer2025_x64_en-us.iso"
+      run_once: true
     - name: Download VirtIO Windows Drivers
       get_url:
         url: "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
-        dest: "/var/lib/vz/template/iso/virtio-win.iso"
+        dest: "/mnt/pve/NFS-TempStorage/template/iso/virtio-win.iso"
+      run_once: true
