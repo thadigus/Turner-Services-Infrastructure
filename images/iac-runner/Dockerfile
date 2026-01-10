@@ -2,6 +2,8 @@ FROM registry.access.redhat.com/ubi9/ubi:latest
 ARG UID=1000
 ARG GID=1000
 WORKDIR /workspace
+COPY ../../collections/requirements.yml /tmp/requirements.yml
+COPY ../../requirements.txt /tmp/requirements.txt
 
 # Installing Python Git and Ansible
 RUN dnf update -y
@@ -12,11 +14,10 @@ RUN dnf install openssh-clients sshpass python3 python3-pip genisoimage sudo -y
 
 # Install WinRM Python Module and Proxmox Python Module
 RUN pip3 install --upgrade setuptools
-RUN pip3 install ansible
-RUN pip3 install pywinrm proxmoxer
+RUN pip3 install -r /tmp/requirements.txt
 
-# Install OPNsense Collection 
-RUN ansible-galaxy collection install ansibleguy.opnsense
+# Install Pulumi
+RUN curl -fsSL https://get.pulumi.com | sh
 
 # Install Packer
 RUN dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
