@@ -1,0 +1,39 @@
+#####################
+## server-list.yml ##
+#####################
+#
+# List of all servers to create on Proxmox hosts
+---
+template_node: prox4
+
+virtual_machines:
+  - name: windows-testing
+    template_name: 'windows-base-image'
+    prox_node: prox2
+    storage_location: NFS-ProdVolRepl
+    cpu_count: 2
+    ram_amount: 4096
+    disk_amount: 20
+    vlan: 3
+    start_on_boot: True
+    vm_state: present
+  - name: rhel-testing
+    template_name: 'rhel-base-image'
+    prox_node: prox4
+    storage_location: NFS-ProdVolRepl
+    cpu_count: 2
+    ram_amount: 4096
+    disk_amount: 40
+    vlan: 3
+    start_on_boot: True
+    vm_state: present
+  - name: ubuntu-testing
+    template_name: 'ubuntu-base-image'
+    prox_node: prox3
+    storage_location: NFS-ProdVolRepl
+    cpu_count: 2
+    ram_amount: 4096
+    disk_amount: 40
+    vlan: 3
+    start_on_boot: True
+    vm_state: present
