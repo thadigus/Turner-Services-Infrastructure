@@ -3,3 +3,4 @@ pywinrm
 proxmoxer
 pulumi
 pulumiverse_unifi
+pulumi_proxmoxve

@@ -1,0 +1,125 @@
+# Pulumi Proxmox VM Deployment
+
+This directory contains a Pulumi program that provisions Proxmox VMs from a YAML
+server list. It supports template cloning, disk sizing (including resize after
+clone), and basic input validation.
+
+## Requirements
+
+- Pulumi CLI
+- Python 3.9+
+- Proxmox VE API access (password or API token)
+
+## Quick Start
+
+1) Initialize a Pulumi project in this directory:
+
+```
+pulumi new -d "Proxmox IaC deployment for Turner Services" -n "ts-proxmox" -s "ts-proxmox" --dir ./deployment/pulumi-proxmox/ --force python
+```
+
+2) Create and activate a virtual environment, then install dependencies:
+
+```
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r ../../requirements.txt
+```
+
+3) Configure Proxmox access (choose one auth method):
+
+```
+pulumi config set proxmox:endpoint https://<pve-host>:8006
+pulumi config set --secret proxmox:apiToken <user>!<tokenid>=<secret>
+```
+
+or
+
+```
+pulumi config set proxmox:endpoint https://<pve-host>:8006
+pulumi config set --secret proxmox:password <password>
+```
+
+4) (Optional) point at custom server list and inventory files:
+
+```
+pulumi config set serverListPath ../../turner-services-sensitive-repo/server-list-prod.yml
+pulumi config set inventoryPath ../../turner-services-sensitive-repo/inventories/ansible-inv-rack.proxmox.yml
+```
+
+5) Preview and deploy:
+
+```
+pulumi up
+```
+
+## Configuration Files
+
+The program looks for these paths by default, in order:
+
+- Server list:
+- `../../turner-services-sensitive-repo/server-list-prod.yml`
+  - `../server-list.example.yml`
+- Inventory (for endpoint, user, and token info):
+  - `../../turner-services-sensitive-repo/inventories/ansible-inv-rack.proxmox.yml`
+  - `../../inventories/ansible-inv-example.proxmox.yml`
+
+You can override these with Pulumi config values:
+
+- `serverListPath`
+- `inventoryPath`
+You can also override the server list via env var `TS_SERVER_LIST_PATH`, which
+is useful for local/dev runs.
+
+## Server List Schema (YAML)
+
+Top-level keys:
+
+- `template_node`: Proxmox node where templates live
+- `virtual_machines`: list of VM definitions
+
+VM fields (common):
+
+- `name` (required)
+- `prox_node` (required) - target Proxmox node
+- `storage_location` - target datastore
+- `cpu_count` (default 1)
+- `ram_amount` (MB, default 512)
+- `vlan` (optional)
+- `start_on_boot` (default true)
+- `vm_state` (present/absent, default present)
+
+Template clone fields:
+
+- `template_name` (required for clone)
+- `disk_amount` (GB, optional) - resizes the primary disk after clone; must be >= template size
+- `disk_interface` (default `scsi0`) - interface to resize
+- `storage_location` (optional) - target datastore. If set and you want to keep the template size, still set
+  `disk_amount` to the template size to avoid the provider defaulting to 8G during clone moves.
+
+ISO-based (non-template) fields:
+
+- `disk_amount` (GB)
+
+Storage plan fields (currently used for size validation only):
+
+- `storage_plan` list with `device`, `vg`, and `lv_targets`
+
+### Disk Size Validation
+
+- If `disk_amount` is omitted but a `storage_plan` exists, the VM disk size is
+  set to the sum of all `lv_targets` sizes.
+- If a `storage_plan` total exceeds `disk_amount`, the deployment fails fast.
+
+## Notes
+
+- Template disk resize assumes the primary disk interface is `scsi0`. Override
+  with `disk_interface` if your template uses `virtio0`, `sata0`, etc.
+- The program explicitly clears the default CD-ROM device (`ide3`). Proxmox may
+  still show an empty CD-ROM slot; removing the device entirely requires a
+  post-provision `qm set <vmid> -delete ide3` on the node.
+- Proxmox reports disk speed defaults after creation; the program ignores
+  `disks[0].speed` to avoid persistent diffs while still allowing disk size
+  changes.
+- `storage_plan` is not applied to the VM yet; it is only used to validate
+  disk sizing.

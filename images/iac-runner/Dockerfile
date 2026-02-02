@@ -4,6 +4,7 @@ ARG GID=1000
 WORKDIR /workspace
 COPY ../../collections/requirements.yml /tmp/requirements.yml
 COPY ../../requirements.txt /tmp/requirements.txt
+COPY ../../deployment/pulumi-proxmox/requirements.txt /tmp/pulumi-proxmox-requirements.txt
 
 # Installing Python Git and Ansible
 RUN dnf update -y
@@ -15,9 +16,7 @@ RUN dnf install openssh-clients sshpass python3 python3-pip genisoimage sudo -y
 # Install WinRM Python Module and Proxmox Python Module
 RUN pip3 install --upgrade setuptools
 RUN pip3 install -r /tmp/requirements.txt
-
-# Install Pulumi
-RUN curl -fsSL https://get.pulumi.com | sh
+RUN pip3 install -r /tmp/pulumi-proxmox-requirements.txt
 
 # Install Packer
 RUN dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
@@ -50,6 +49,9 @@ USER turneradmin
 
 # Configure Git
 RUN git config --global --add safe.directory /workspace
+
+# Install Pulumi
+RUN curl -fsSL https://get.pulumi.com | sh
 
 # Launch whatever shell we end up picking...
 CMD /bin/bash
