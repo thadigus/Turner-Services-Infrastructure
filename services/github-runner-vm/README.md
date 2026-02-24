@@ -35,6 +35,11 @@ This supports CI jobs that:
 - run `container:` jobs
 - launch your existing dependency-heavy Packer container workflows via Docker
 
+For `container:` jobs, runner data is mounted at the same absolute path on host
+and in the runner container (`/opt/github-runner/data`). This is required when
+the runner uses the host Docker socket so job-container bind mounts (including
+`/__e` for action runtimes like Node) resolve correctly.
+
 ## Nightly Maintenance
 
 The playbook adds (without overwriting existing crontabs) two root cron entries:

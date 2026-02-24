@@ -313,6 +313,7 @@
           RUNNER_REPOSITORY_URL={{ hostvars['localhost'].gha_runner_repo_url_resolved }}
           RUNNER_TOKEN={{ hostvars['localhost'].gha_runner_token_resolved }}
           RUNNER_WORKDIR={{ gha_runner_workdir }}
+          RUNNER_HOME={{ gha_runner_data_dir }}
           RUNNER_LABELS={{ gha_runner_labels }}
           RUNNER_GROUP={{ gha_runner_group }}
           RUN_AS_ROOT=false
@@ -339,7 +340,7 @@
           RestartSec=5
           EnvironmentFile=/etc/github-runner/runner.env
           ExecStartPre=-/usr/bin/docker rm -f github-actions-runner
-          ExecStart=/usr/bin/docker run --name github-actions-runner --user {{ gha_runner_container_user_resolved }} --group-add {{ gha_host_docker_gid }} --env-file /etc/github-runner/runner.env -v /var/run/docker.sock:/var/run/docker.sock -v {{ gha_runner_data_dir }}:/home/runner/actions-runner {{ gha_runner_image }}
+          ExecStart=/usr/bin/docker run --name github-actions-runner --user {{ gha_runner_container_user_resolved }} --group-add {{ gha_host_docker_gid }} --env-file /etc/github-runner/runner.env -v /var/run/docker.sock:/var/run/docker.sock -v {{ gha_runner_data_dir }}:{{ gha_runner_data_dir }} {{ gha_runner_image }}
           ExecStop=/usr/bin/docker stop github-actions-runner
           ExecStopPost=-/usr/bin/docker rm -f github-actions-runner
 

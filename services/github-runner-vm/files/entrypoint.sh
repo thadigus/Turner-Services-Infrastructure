@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-RUNNER_HOME="/home/runner/actions-runner"
-RUNNER_DIST="/opt/actions-runner-dist"
+RUNNER_HOME="${RUNNER_HOME:-/opt/github-runner/data}"
+RUNNER_DIST="${RUNNER_DIST:-/opt/actions-runner-dist}"
 
 required_vars=(RUNNER_NAME RUNNER_WORKDIR)
 for var_name in "${required_vars[@]}"; do
