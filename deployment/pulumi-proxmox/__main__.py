@@ -231,7 +231,7 @@ def _build_provider(inventory_path: Optional[Path]) -> proxmox.Provider:
     )
 
 
-_template_cache: Dict[str, int] = {}
+_template_cache: Dict[tuple[str, Optional[str]], int] = {}
 
 
 def _resolve_template_vm_id(
@@ -239,8 +239,9 @@ def _resolve_template_vm_id(
     template_node: Optional[str],
     provider: proxmox.Provider,
 ) -> int:
-    if template_name in _template_cache:
-        return _template_cache[template_name]
+    cache_key = (template_name, template_node)
+    if cache_key in _template_cache:
+        return _template_cache[cache_key]
 
     filters = [
         proxmox.vm.GetVirtualMachinesFilterArgs(name="name", values=[template_name]),
@@ -262,7 +263,7 @@ def _resolve_template_vm_id(
         raise ValueError(f"No template VM found for '{template_name}'.")
 
     vm_id = result.vms[0].vm_id
-    _template_cache[template_name] = vm_id
+    _template_cache[cache_key] = vm_id
     return vm_id
 
 
@@ -281,6 +282,7 @@ def _build_vm_resource(
     vm: VmConfig,
     template_node: Optional[str],
     provider: proxmox.Provider,
+    vm_tags: List[str],
 ) -> Optional[proxmox.vm.VirtualMachine]:
     if vm.vm_state != "present":
         return None
@@ -290,8 +292,17 @@ def _build_vm_resource(
         "node_name": vm.prox_node,
         "cpu": {"cores": vm.cpu_count},
         "memory": {"dedicated": vm.ram_amount},
+        "agent": {
+            "enabled": True,
+            "trim": True,
+            "type": "virtio",
+            # Avoid long create/apply stalls when the guest agent is not yet
+            # ready immediately after first boot/clone.
+            "timeout": "30s",
+        },
         "on_boot": vm.start_on_boot,
         "started": True,
+        "tags": vm_tags,
         "network_devices": [
             {
                 "bridge": "vmbr0",
@@ -370,11 +381,39 @@ def _resolve_paths(config: pulumi.Config) -> tuple[Path, Optional[Path]]:
     return resolved_server_list, resolved_inventory
 
 
+def _resolve_stack_environment(config: pulumi.Config, server_list_file: Path) -> str:
+    env_hint = _get_config_value(config, "environment", "stackEnvironment")
+    candidates = [
+        (env_hint or "").strip().lower(),
+        pulumi.get_stack().strip().lower(),
+        server_list_file.stem.strip().lower(),
+    ]
+
+    for value in candidates:
+        if any(token in value for token in ("prod", "production")):
+            return "production"
+        if any(token in value for token in ("test", "testing")):
+            return "test"
+
+    raise ValueError(
+        "Unable to determine stack environment for VM tags. "
+        "Use a stack/server list name containing 'prod' or 'test', "
+        "or set Pulumi config key 'environment' to 'production' or 'test'."
+    )
+
+
+def _build_vm_tags(stack_environment: str) -> List[str]:
+    # Proxmox normalizes/sorts tags, so keep deterministic order in code too.
+    return sorted(["pulumi", stack_environment.lower()])
+
+
 config = pulumi.Config()
 server_list_file, inventory_file = _resolve_paths(config)
 server_list = load_server_list(server_list_file)
+stack_environment = _resolve_stack_environment(config, server_list_file)
+vm_tags = _build_vm_tags(stack_environment)
 
 proxmox_provider = _build_provider(inventory_file)
 
 for vm in server_list.virtual_machines:
-    _build_vm_resource(vm, server_list.template_node, proxmox_provider)
+    _build_vm_resource(vm, server_list.template_node, proxmox_provider, vm_tags)

@@ -1,0 +1,3 @@
+config:
+  ts-proxmox:serverListPath: ../../turner-services-sensitive-repo/server-list-test.yml
+  ts-proxmox:environment: test

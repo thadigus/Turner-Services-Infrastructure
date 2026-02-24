@@ -1,10 +1,23 @@
 {
   "name": "Turner Services IaC Devcontainer",
   "build": {
-    "dockerfile": "Dockerfile"
+    "dockerfile": "../images/iac-runner/Dockerfile",
+    "context": ".."
   },
-  "settings": {
-    "terminal.integrated.shell.linux": "/bin/bash"
+  "runArgs": [
+    "--network=host"
+  ],
+  "containerEnv": {
+    "PULUMI_STACK": "ts-proxmox-test",
+    "TS_SERVER_LIST_PATH": "../../turner-services-sensitive-repo/server-list-test.yml"
   },
-  "remoteUser": "root"
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.shell.linux": "/bin/bash"
+      }
+    }
+  },
+  "remoteUser": "turneradmin",
+  "updateRemoteUserUID": true
 }

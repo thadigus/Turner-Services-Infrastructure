@@ -13,3 +13,12 @@ A simple Ansible playbook to deploy the Turner Services Ansible service account 
 ### linux-packer-config.yml
 
 Ansible playbook to be ran against hosts after provisioning process with Packer before they are saved to templates to be deployed with Terraform.
+
+### linux-base-config-pulumi.yml
+
+Runs the `linux-base-config` role against all Proxmox VMs tagged `pulumi` via
+the dynamic inventory keyed group `tag_pulumi`.
+
+```bash
+ansible-playbook -i turner-services-sensitive-repo/inventories/ansible-inv-rack.proxmox.yml deployment/linux-base-config-pulumi.yml
+```
