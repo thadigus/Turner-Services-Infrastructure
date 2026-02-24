@@ -1,0 +1,409 @@
+########################################################
+## /services/github-runner-vm/site.yml                ##
+########################################################
+#
+# Workload-specific configuration for GitHub runner VMs.
+
+---
+- name: Configure GitHub Runner VMs
+  hosts: gha-runner-*
+  become: yes
+  gather_facts: yes
+  vars:
+    gha_runner_image: "{{ lookup('ansible.builtin.env', 'GHA_RUNNER_IMAGE') | default('local/github-actions-runner:latest', true) | trim }}"
+    gha_runner_repo_url_env: "{{ lookup('ansible.builtin.env', 'GHA_RUNNER_REPOSITORY_URL') | default('', true) | trim }}"
+    gha_runner_token_env: "{{ lookup('ansible.builtin.env', 'GHA_RUNNER_TOKEN') | default('', true) | trim }}"
+    gha_runner_labels: "{{ lookup('ansible.builtin.env', 'GHA_RUNNER_LABELS') | default('self-hosted,linux,docker', true) | trim }}"
+    gha_runner_group: "{{ lookup('ansible.builtin.env', 'GHA_RUNNER_GROUP') | default('Default', true) | trim }}"
+    gha_runner_workdir: "{{ lookup('ansible.builtin.env', 'GHA_RUNNER_WORKDIR') | default('_work', true) | trim }}"
+    gha_runner_name_prefix: "{{ lookup('ansible.builtin.env', 'GHA_RUNNER_NAME_PREFIX') | default('', true) | trim }}"
+    gha_runner_service_user: "{{ lookup('ansible.builtin.env', 'GHA_RUNNER_SERVICE_USER') | default('gha-runner', true) | trim }}"
+    gha_runner_service_group: "{{ lookup('ansible.builtin.env', 'GHA_RUNNER_SERVICE_GROUP') | default('gha-runner', true) | trim }}"
+    gha_runner_uid: "{{ lookup('ansible.builtin.env', 'GHA_RUNNER_UID') | default('', true) | trim }}"
+    gha_runner_gid: "{{ lookup('ansible.builtin.env', 'GHA_RUNNER_GID') | default('', true) | trim }}"
+    gha_runner_container_user: "{{ lookup('ansible.builtin.env', 'GHA_RUNNER_CONTAINER_USER') | default('', true) | trim }}"
+    gha_runner_data_dir: /opt/github-runner/data
+    gha_runner_build_dir: /opt/github-runner/build
+    gha_runner_expand_var_lv: "{{ lookup('ansible.builtin.env', 'GHA_RUNNER_EXPAND_VAR_LV') | default('true', true) | bool }}"
+  pre_tasks:
+    - name: Check whether runner is already registered on each host
+      ansible.builtin.stat:
+        path: "{{ gha_runner_data_dir }}/.runner"
+      register: gha_runner_registration_file
+
+    - name: Mark whether host needs first-time runner registration
+      ansible.builtin.set_fact:
+        gha_runner_needs_registration: "{{ not gha_runner_registration_file.stat.exists }}"
+
+    - name: Prompt for repository URL if needed and env var is missing
+      ansible.builtin.pause:
+        prompt: "GHA_RUNNER_REPOSITORY_URL not set. Enter GitHub repo URL (example: https://github.com/org/repo)"
+      register: gha_runner_repo_prompt
+      when:
+        - gha_runner_repo_url_env | length == 0
+        - ansible_play_hosts_all | map('extract', hostvars, 'gha_runner_needs_registration') | select('equalto', true) | list | length > 0
+      run_once: true
+      delegate_to: localhost
+
+    - name: Prompt for runner registration token if needed and env var is missing
+      ansible.builtin.pause:
+        prompt: "GHA_RUNNER_TOKEN not set. Enter GitHub runner registration token"
+        echo: false
+      register: gha_runner_token_prompt
+      no_log: true
+      when:
+        - gha_runner_token_env | length == 0
+        - ansible_play_hosts_all | map('extract', hostvars, 'gha_runner_needs_registration') | select('equalto', true) | list | length > 0
+      run_once: true
+      delegate_to: localhost
+
+    - name: Resolve runner secrets from environment or prompt input
+      ansible.builtin.set_fact:
+        gha_runner_repo_url_resolved: "{{ gha_runner_repo_url_env if (gha_runner_repo_url_env | length > 0) else (gha_runner_repo_prompt.user_input | default('') | trim) }}"
+        gha_runner_token_resolved: "{{ gha_runner_token_env if (gha_runner_token_env | length > 0) else (gha_runner_token_prompt.user_input | default('') | trim) }}"
+      no_log: true
+      run_once: true
+      delegate_to: localhost
+      delegate_facts: true
+
+    - name: Validate required registration inputs when host needs first-time setup
+      ansible.builtin.assert:
+        that:
+          - hostvars['localhost'].gha_runner_repo_url_resolved | length > 0
+          - hostvars['localhost'].gha_runner_token_resolved | length > 0
+        fail_msg: "First-time runner setup requires GHA_RUNNER_REPOSITORY_URL and GHA_RUNNER_TOKEN."
+      when: gha_runner_needs_registration
+  tasks:
+    - name: Install Docker packages on Debian-family hosts
+      ansible.builtin.apt:
+        name:
+          - docker.io
+        state: present
+        update_cache: true
+      when: ansible_os_family == "Debian"
+
+    - name: Install Docker packages on RedHat-family hosts
+      ansible.builtin.dnf:
+        name:
+          - docker
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Fail for unsupported host OS families
+      ansible.builtin.fail:
+        msg: "Unsupported OS family for runner setup: {{ ansible_os_family }}"
+      when: ansible_os_family not in ["Debian", "RedHat"]
+
+    - name: Ensure Docker service is enabled and running
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Determine backing device for /var
+      ansible.builtin.command:
+        cmd: "findmnt -no SOURCE /var"
+      register: gha_var_source
+      changed_when: false
+      when: gha_runner_expand_var_lv
+
+    - name: Check whether /var is an LVM logical volume
+      ansible.builtin.command:
+        cmd: "lvs --noheadings -o vg_name,lv_name {{ gha_var_source.stdout | trim }}"
+      register: gha_var_lvm_info
+      changed_when: false
+      failed_when: false
+      when: gha_runner_expand_var_lv
+
+    - name: Set /var volume group from lvs output
+      ansible.builtin.set_fact:
+        gha_var_vg_name: "{{ (gha_var_lvm_info.stdout | trim).split()[0] }}"
+      when:
+        - gha_runner_expand_var_lv
+        - gha_var_lvm_info.rc == 0
+        - gha_var_lvm_info.stdout | trim | length > 0
+
+    - name: Check free extents in /var volume group
+      ansible.builtin.command:
+        cmd: "vgs --noheadings -o vg_free_count {{ gha_var_vg_name }}"
+      register: gha_var_vg_free
+      changed_when: false
+      when:
+        - gha_runner_expand_var_lv
+        - gha_var_lvm_info.rc == 0
+        - gha_var_vg_name is defined
+
+    - name: Set /var VG free extent count
+      ansible.builtin.set_fact:
+        gha_var_vg_free_count: "{{ gha_var_vg_free.stdout | trim | int }}"
+      when:
+        - gha_runner_expand_var_lv
+        - gha_var_lvm_info.rc == 0
+        - gha_var_vg_free is defined
+
+    - name: Extend /var logical volume to consume all free extents
+      ansible.builtin.command:
+        cmd: "lvextend -l +100%FREE {{ gha_var_source.stdout | trim }}"
+      register: gha_var_lvextend
+      changed_when: true
+      when:
+        - gha_runner_expand_var_lv
+        - gha_var_lvm_info.rc == 0
+        - gha_var_vg_free_count | default(0) | int > 0
+
+    - name: Detect /var filesystem type
+      ansible.builtin.command:
+        cmd: "findmnt -no FSTYPE /var"
+      register: gha_var_fstype
+      changed_when: false
+      when:
+        - gha_runner_expand_var_lv
+        - gha_var_lvextend is changed
+
+    - name: Grow ext filesystem on /var after LV extend
+      ansible.builtin.command:
+        cmd: "resize2fs {{ gha_var_source.stdout | trim }}"
+      when:
+        - gha_runner_expand_var_lv
+        - gha_var_lvextend is changed
+        - gha_var_fstype.stdout | trim in ['ext2', 'ext3', 'ext4']
+
+    - name: Grow XFS filesystem on /var after LV extend
+      ansible.builtin.command:
+        cmd: "xfs_growfs /var"
+      when:
+        - gha_runner_expand_var_lv
+        - gha_var_lvextend is changed
+        - gha_var_fstype.stdout | trim == 'xfs'
+
+    - name: Look up host Docker group details
+      ansible.builtin.getent:
+        database: group
+        key: docker
+
+    - name: Set host Docker group GID fact
+      ansible.builtin.set_fact:
+        gha_host_docker_gid: "{{ ansible_facts.getent_group.docker[1] }}"
+
+    - name: Validate host Docker group GID lookup
+      ansible.builtin.assert:
+        that:
+          - gha_host_docker_gid is defined
+          - gha_host_docker_gid | length > 0
+        fail_msg: "Could not resolve host Docker group GID; cannot grant runner socket access."
+
+    - name: Ensure GitHub runner service group exists
+      ansible.builtin.group:
+        name: "{{ gha_runner_service_group }}"
+        gid: "{{ (gha_runner_gid | length > 0) | ternary(gha_runner_gid, omit) }}"
+        system: true
+        state: present
+
+    - name: Ensure GitHub runner service user exists
+      ansible.builtin.user:
+        name: "{{ gha_runner_service_user }}"
+        uid: "{{ (gha_runner_uid | length > 0) | ternary(gha_runner_uid, omit) }}"
+        group: "{{ gha_runner_service_group }}"
+        groups: docker
+        append: true
+        system: true
+        create_home: true
+        home: /opt/github-runner
+        state: present
+
+    - name: Look up runner service account details
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ gha_runner_service_user }}"
+
+    - name: Look up runner service group details
+      ansible.builtin.getent:
+        database: group
+        key: "{{ gha_runner_service_group }}"
+
+    - name: Set effective runner UID/GID facts
+      ansible.builtin.set_fact:
+        gha_runner_effective_uid: "{{ ansible_facts.getent_passwd[gha_runner_service_user][1] }}"
+        gha_runner_effective_gid: "{{ ansible_facts.getent_group[gha_runner_service_group][1] }}"
+        gha_runner_container_user_resolved: "{{ gha_runner_container_user if (gha_runner_container_user | length > 0) else (ansible_facts.getent_passwd[gha_runner_service_user][1] ~ ':' ~ ansible_facts.getent_group[gha_runner_service_group][1]) }}"
+
+    - name: Ensure runner root directory exists
+      ansible.builtin.file:
+        path: /opt/github-runner
+        state: directory
+        owner: "{{ gha_runner_service_user }}"
+        group: "{{ gha_runner_service_group }}"
+        mode: "0755"
+
+    - name: Ensure runner data directory exists
+      ansible.builtin.file:
+        path: "{{ gha_runner_data_dir }}"
+        state: directory
+        owner: "{{ gha_runner_service_user }}"
+        group: "{{ gha_runner_service_group }}"
+        mode: "0755"
+
+    - name: Ensure runner image build directory exists
+      ansible.builtin.file:
+        path: "{{ gha_runner_build_dir }}"
+        state: directory
+        owner: "{{ gha_runner_service_user }}"
+        group: "{{ gha_runner_service_group }}"
+        mode: "0755"
+
+    - name: Ensure runner config directory exists
+      ansible.builtin.file:
+        path: /etc/github-runner
+        state: directory
+        owner: root
+        group: "{{ gha_runner_service_group }}"
+        mode: "0750"
+
+    - name: Copy runner container Dockerfile
+      ansible.builtin.copy:
+        src: files/Dockerfile.runner
+        dest: "{{ gha_runner_build_dir }}/Dockerfile"
+        owner: "{{ gha_runner_service_user }}"
+        group: "{{ gha_runner_service_group }}"
+        mode: "0644"
+
+    - name: Copy runner container entrypoint script
+      ansible.builtin.copy:
+        src: files/entrypoint.sh
+        dest: "{{ gha_runner_build_dir }}/entrypoint.sh"
+        owner: "{{ gha_runner_service_user }}"
+        group: "{{ gha_runner_service_group }}"
+        mode: "0755"
+
+    - name: Build GitHub runner container image
+      block:
+        - name: Prune Docker builder cache before build (best effort)
+          ansible.builtin.command:
+            cmd: "docker builder prune -af"
+          changed_when: false
+          failed_when: false
+
+        - name: Build GitHub runner container image (primary attempt)
+          ansible.builtin.command:
+            cmd: "docker build --pull --no-cache --build-arg RUNNER_UID={{ gha_runner_effective_uid }} --build-arg RUNNER_GID={{ gha_runner_effective_gid }} -t {{ gha_runner_image }} ."
+            chdir: "{{ gha_runner_build_dir }}"
+          changed_when: true
+          notify: Restart GitHub runner container service
+      rescue:
+        - name: Emergency Docker cleanup after failed build attempt
+          ansible.builtin.command:
+            cmd: "docker system prune -af --volumes"
+          changed_when: false
+
+        - name: Rebuild GitHub runner container image after cleanup
+          ansible.builtin.command:
+            cmd: "docker build --pull --no-cache --build-arg RUNNER_UID={{ gha_runner_effective_uid }} --build-arg RUNNER_GID={{ gha_runner_effective_gid }} -t {{ gha_runner_image }} ."
+            chdir: "{{ gha_runner_build_dir }}"
+          changed_when: true
+          notify: Restart GitHub runner container service
+
+    - name: Write GitHub runner environment file
+      ansible.builtin.copy:
+        dest: /etc/github-runner/runner.env
+        owner: root
+        group: "{{ gha_runner_service_group }}"
+        mode: "0640"
+        content: |
+          RUNNER_NAME={{ (gha_runner_name_prefix ~ '-') if (gha_runner_name_prefix | length > 0) else '' }}{{ inventory_hostname }}
+          RUNNER_REPOSITORY_URL={{ hostvars['localhost'].gha_runner_repo_url_resolved }}
+          RUNNER_TOKEN={{ hostvars['localhost'].gha_runner_token_resolved }}
+          RUNNER_WORKDIR={{ gha_runner_workdir }}
+          RUNNER_LABELS={{ gha_runner_labels }}
+          RUNNER_GROUP={{ gha_runner_group }}
+          RUN_AS_ROOT=false
+      no_log: true
+      notify: Restart GitHub runner container service
+
+    - name: Install systemd service for GitHub runner container
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/github-actions-runner.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=GitHub Actions Runner (Container)
+          Wants=network-online.target docker.service
+          After=network-online.target docker.service
+
+          [Service]
+          Type=simple
+          User={{ gha_runner_service_user }}
+          Group={{ gha_runner_service_group }}
+          Restart=always
+          RestartSec=5
+          EnvironmentFile=/etc/github-runner/runner.env
+          ExecStartPre=-/usr/bin/docker rm -f github-actions-runner
+          ExecStart=/usr/bin/docker run --name github-actions-runner --user {{ gha_runner_container_user_resolved }} --group-add {{ gha_host_docker_gid }} --env-file /etc/github-runner/runner.env -v /var/run/docker.sock:/var/run/docker.sock -v {{ gha_runner_data_dir }}:/home/runner/actions-runner {{ gha_runner_image }}
+          ExecStop=/usr/bin/docker stop github-actions-runner
+          ExecStopPost=-/usr/bin/docker rm -f github-actions-runner
+
+          [Install]
+          WantedBy=multi-user.target
+      notify:
+        - Reload systemd
+        - Restart GitHub runner container service
+
+    - name: Ensure GitHub runner container service is enabled and started
+      ansible.builtin.systemd:
+        name: github-actions-runner.service
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Install nightly GitHub runner image rebuild script
+      ansible.builtin.copy:
+        dest: /usr/local/sbin/gha-runner-rebuild.sh
+        owner: root
+        group: root
+        mode: "0750"
+        content: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          /usr/bin/docker builder prune -af || true
+          cd {{ gha_runner_build_dir }}
+          /usr/bin/docker build --pull --no-cache --build-arg RUNNER_UID={{ gha_runner_effective_uid }} --build-arg RUNNER_GID={{ gha_runner_effective_gid }} -t {{ gha_runner_image }} .
+          /usr/bin/systemctl restart github-actions-runner.service
+
+    - name: Install nightly Docker cleanup script
+      ansible.builtin.copy:
+        dest: /usr/local/sbin/gha-runner-prune.sh
+        owner: root
+        group: root
+        mode: "0750"
+        content: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          /usr/bin/docker system prune -af --volumes
+          /usr/bin/docker builder prune -af
+
+    - name: Schedule nightly GitHub runner image rebuild cron
+      ansible.builtin.cron:
+        name: "github-runner-nightly-rebuild"
+        user: root
+        minute: "15"
+        hour: "2"
+        job: "/usr/local/sbin/gha-runner-rebuild.sh >> /var/log/gha-runner-rebuild.log 2>&1"
+
+    - name: Schedule nightly Docker cleanup cron
+      ansible.builtin.cron:
+        name: "github-runner-nightly-prune"
+        user: root
+        minute: "45"
+        hour: "2"
+        job: "/usr/local/sbin/gha-runner-prune.sh >> /var/log/gha-runner-prune.log 2>&1"
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Restart GitHub runner container service
+      ansible.builtin.systemd:
+        name: github-actions-runner.service
+        state: restarted

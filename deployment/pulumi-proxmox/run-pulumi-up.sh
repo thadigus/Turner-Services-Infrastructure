@@ -64,7 +64,7 @@ run_pulumi() {
   env -u TS_SERVER_LIST_PATH -u PULUMI_STACK pulumi "$@"
 }
 
-ANSIBLE_PLAYBOOK="../linux-base-config-pulumi.yml"
+ANSIBLE_PLAYBOOK="../base-config-pulumi.yml"
 REBOOT_PLAYBOOK="../reboot-linux-hosts.yml"
 PRIMARY_INVENTORY="../../turner-services-sensitive-repo/inventories/ansible-inv-rack.proxmox.yml"
 FALLBACK_INVENTORY="../../inventories/ansible-inv-example.proxmox.yml"
@@ -205,7 +205,7 @@ for target in "${targets[@]}"; do
 
   if [[ "${MODE}" == "up" ]]; then
     limit_expr="tag_pulumi:&tag_${environment}"
-    echo "Running Ansible linux-base-config for ${target}..."
+    echo "Running Ansible base-config for ${target}..."
     echo "Using inventory: ${ANSIBLE_INVENTORY}"
     echo "Using limit: ${limit_expr}"
     ANSIBLE_CONFIG="${REPO_ROOT}/ansible.cfg" \
@@ -216,13 +216,14 @@ for target in "${targets[@]}"; do
       --limit "${limit_expr}"
 
     if [[ -n "${changed_host_limit}" ]]; then
-      echo "Rebooting meaningfully updated VMs: ${changed_host_limit}"
+      linux_changed_host_limit="tag_linux:&tag_${environment}:&${changed_host_limit}"
+      echo "Rebooting meaningfully updated Linux VMs: ${linux_changed_host_limit}"
       ANSIBLE_CONFIG="${REPO_ROOT}/ansible.cfg" \
       ANSIBLE_ROLES_PATH="${REPO_ROOT}/roles${ANSIBLE_ROLES_PATH:+:${ANSIBLE_ROLES_PATH}}" \
       ansible-playbook \
         -i "${ANSIBLE_INVENTORY}" \
         "${REBOOT_PLAYBOOK}" \
-        --limit "${changed_host_limit}"
+        --limit "${linux_changed_host_limit}"
     fi
   fi
 done

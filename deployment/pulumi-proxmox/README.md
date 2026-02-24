@@ -92,11 +92,11 @@ Behavior:
 - Runs `pulumi preview` for the selected stack(s) by default
 - Runs `pulumi up --yes` when `-u`/`--up` is provided
   - After each successful `up`, runs:
-    - `ansible-playbook -i <inventory> ../linux-base-config-pulumi.yml --limit tag_pulumi:&tag_<environment>`
+    - `ansible-playbook -i <inventory> ../base-config-pulumi.yml --limit tag_pulumi:&tag_<environment>`
     - `<environment>` is `test` or `production` based on the selected stack
-  - After base config, reboots only VMs with meaningful Pulumi VM changes
+  - After base config, reboots only Linux VMs with meaningful Pulumi VM changes
     (`created`/`updated`/`replaced`) by running:
-    - `ansible-playbook -i <inventory> ../reboot-linux-hosts.yml --limit <changed_vm_names>`
+    - `ansible-playbook -i <inventory> ../reboot-linux-hosts.yml --limit tag_linux:&tag_<environment>:&<changed_vm_names>`
 - Runs `pulumi destroy --yes` when `-d`/`--destroy` is provided
 
 Optional stack-name overrides:
@@ -130,6 +130,7 @@ All VMs created by this Pulumi program are tagged with:
 - `pulumi`
 - `production` for production stacks
 - `test` for test stacks
+- `linux` or `windows` based on VM metadata (`vm_type`/`os_type`, template name, or VM name)
 
 Environment is resolved from (in order):
 
@@ -150,10 +151,12 @@ VM fields (common):
 - `prox_node` (required) - target Proxmox node
 - `storage_location` - target datastore
 - `cpu_count` (default 1)
+- CPU model is enforced to `x86-64-v3` for deployed VMs
 - `ram_amount` (MB, default 512)
 - `vlan` (optional)
 - `start_on_boot` (default true)
 - `vm_state` (present/absent, default present)
+- `vm_type` or `os_type` (optional) - use `windows` for Windows tagging; defaults to Linux when unspecified
 
 Template clone fields:
 
@@ -167,14 +170,16 @@ ISO-based (non-template) fields:
 
 - `disk_amount` (GB)
 
-Storage plan fields (currently used for size validation only):
+Storage plan fields:
 
-- `storage_plan` list with `device`, `vg`, and `lv_targets`
+- `storage_plan` list entries with:
+  - `lv` (mountpoint, for example `/var`)
+  - `expand_by` (relative growth amount, for example `10G`)
 
 ### Disk Size Validation
 
 - If `disk_amount` is omitted but a `storage_plan` exists, the VM disk size is
-  set to the sum of all `lv_targets` sizes.
+  auto-calculated as `40G + sum(expand_by)` (migration-safe default).
 - If a `storage_plan` total exceeds `disk_amount`, the deployment fails fast.
 
 ## Notes
@@ -187,5 +192,7 @@ Storage plan fields (currently used for size validation only):
 - Proxmox reports disk speed defaults after creation; the program ignores
   `disks[0].speed` to avoid persistent diffs while still allowing disk size
   changes.
-- `storage_plan` is not applied to the VM yet; it is only used to validate
-  disk sizing.
+- `storage_plan` is consumed by `roles/linux-base-config` during post-provision
+  configuration. The role infers backing VG/PV from each LV mountpoint, grows
+  partition -> PV -> LV -> filesystem, then records a marker so each expansion
+  runs only once per host/entry.

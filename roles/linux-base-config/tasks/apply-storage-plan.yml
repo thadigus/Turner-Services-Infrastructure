@@ -1,0 +1,174 @@
+---
+- name: Validate storage plan entry fields
+  ansible.builtin.assert:
+    that:
+      - linux_base_storage_target.lv | length > 0
+      - linux_base_storage_target.lv.startswith('/')
+      - linux_base_storage_target.expand_by | length > 0
+    fail_msg: "Invalid storage_plan entry: {{ linux_base_storage_target }}"
+
+- name: Build storage plan marker path
+  ansible.builtin.set_fact:
+    linux_base_storage_marker_path: >-
+      /var/lib/turner/storage-plan-applied/{{ (inventory_hostname ~ ':' ~ linux_base_storage_target.lv ~ ':' ~ linux_base_storage_target.expand_by) | hash('sha1') }}
+
+- name: Ensure storage plan marker directory exists
+  ansible.builtin.file:
+    path: /var/lib/turner/storage-plan-applied
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Check whether this storage expansion was already applied
+  ansible.builtin.stat:
+    path: "{{ linux_base_storage_marker_path }}"
+  register: linux_base_storage_marker_stat
+
+- name: Resolve backing source device for LV mountpoint
+  ansible.builtin.command:
+    cmd: "findmnt -n -o SOURCE {{ linux_base_storage_target.lv }}"
+  register: linux_base_storage_mount_source
+  changed_when: false
+  when: not (linux_base_storage_marker_stat.stat.exists | default(false))
+
+- name: Ensure LV mount source is an LVM logical volume
+  ansible.builtin.command:
+    cmd: "lvs --noheadings -o lv_name {{ linux_base_storage_mount_source.stdout | trim }}"
+  register: linux_base_storage_lvs_check
+  changed_when: false
+  when: not (linux_base_storage_marker_stat.stat.exists | default(false))
+
+- name: Read LV mount filesystem type
+  ansible.builtin.command:
+    cmd: "findmnt -n -o FSTYPE {{ linux_base_storage_target.lv }}"
+  register: linux_base_storage_mount_fstype
+  changed_when: false
+  when: not (linux_base_storage_marker_stat.stat.exists | default(false))
+
+- name: Read LV mount volume group name
+  ansible.builtin.command:
+    cmd: "lvs --noheadings -o vg_name {{ linux_base_storage_mount_source.stdout | trim }}"
+  register: linux_base_storage_mount_vg
+  changed_when: false
+  when: not (linux_base_storage_marker_stat.stat.exists | default(false))
+
+- name: Resolve first physical volume backing the LV's volume group
+  ansible.builtin.shell: >-
+    pvs --noheadings -o pv_name --select 'vg_name={{ linux_base_storage_mount_vg.stdout | trim }}'
+    | awk 'NF {print $1; exit}'
+  args:
+    executable: /bin/bash
+  register: linux_base_storage_pv_name
+  changed_when: false
+  when: not (linux_base_storage_marker_stat.stat.exists | default(false))
+
+- name: Normalize physical volume device path
+  ansible.builtin.set_fact:
+    linux_base_storage_pv_device: >-
+      {{
+        (linux_base_storage_pv_name.stdout_lines | default([])
+         | map('trim')
+         | reject('equalto', '')
+         | first) | default('')
+      }}
+  when: not (linux_base_storage_marker_stat.stat.exists | default(false))
+
+- name: Resolve physical disk name for storage plan PV
+  ansible.builtin.shell: "lsblk -dnro PKNAME {{ linux_base_storage_pv_device }} | head -n1"
+  args:
+    executable: /bin/bash
+  register: linux_base_storage_pv_disk
+  changed_when: false
+  when: not (linux_base_storage_marker_stat.stat.exists | default(false))
+
+- name: Resolve partition number for storage plan PV
+  ansible.builtin.shell: "lsblk -dnro PARTN {{ linux_base_storage_pv_device }} | head -n1"
+  args:
+    executable: /bin/bash
+  register: linux_base_storage_pv_partn
+  changed_when: false
+  when: not (linux_base_storage_marker_stat.stat.exists | default(false))
+
+- name: Verify growpart is available
+  ansible.builtin.shell: "command -v growpart"
+  args:
+    executable: /bin/bash
+  register: linux_base_storage_growpart_present
+  changed_when: false
+  when: not (linux_base_storage_marker_stat.stat.exists | default(false))
+
+- name: Validate inferred PV and partition details
+  ansible.builtin.assert:
+    that:
+      - linux_base_storage_pv_device | length > 0
+      - linux_base_storage_pv_disk.stdout | trim | length > 0
+      - linux_base_storage_pv_partn.stdout | trim | length > 0
+      - linux_base_storage_pv_partn.stdout | trim is match('^[0-9]+$')
+      - linux_base_storage_growpart_present.rc == 0
+    fail_msg: >-
+      Could not infer PV/disk/partition or growpart is unavailable for storage_plan entry
+      {{ linux_base_storage_target }}.
+  when: not (linux_base_storage_marker_stat.stat.exists | default(false))
+
+- name: Grow PV partition to consume expanded disk space
+  ansible.builtin.command:
+    cmd: "growpart /dev/{{ linux_base_storage_pv_disk.stdout | trim }} {{ linux_base_storage_pv_partn.stdout | trim }}"
+  register: linux_base_storage_growpart
+  changed_when: linux_base_storage_growpart.rc == 0
+  failed_when: >-
+    linux_base_storage_growpart.rc not in [0, 1] or
+    (linux_base_storage_growpart.rc == 1 and
+     'nochange' not in (((linux_base_storage_growpart.stdout | default('')) ~ (linux_base_storage_growpart.stderr | default(''))) | lower))
+  when: not (linux_base_storage_marker_stat.stat.exists | default(false))
+
+- name: Re-read partition table after growpart
+  ansible.builtin.command:
+    cmd: "partprobe /dev/{{ linux_base_storage_pv_disk.stdout | trim }}"
+  changed_when: false
+  when: not (linux_base_storage_marker_stat.stat.exists | default(false))
+
+- name: Resize LVM physical volume after partition growth
+  ansible.builtin.command:
+    cmd: "pvresize {{ linux_base_storage_pv_device }}"
+  register: linux_base_storage_pvresize
+  changed_when: >-
+    '0 physical volume(s) resized' not in
+    ((linux_base_storage_pvresize.stdout | default('')) ~ ' ' ~ (linux_base_storage_pvresize.stderr | default(''))) | lower
+  when: not (linux_base_storage_marker_stat.stat.exists | default(false))
+
+- name: Extend logical volume for storage plan entry
+  ansible.builtin.command:
+    cmd: "lvextend -L +{{ linux_base_storage_target.expand_by | trim | regex_replace('^\\+', '') }} {{ linux_base_storage_mount_source.stdout | trim }}"
+  register: linux_base_storage_lvextend
+  changed_when: true
+  when: not (linux_base_storage_marker_stat.stat.exists | default(false))
+
+- name: Grow ext filesystem after LV expansion
+  ansible.builtin.command:
+    cmd: "resize2fs {{ linux_base_storage_mount_source.stdout | trim }}"
+  when:
+    - linux_base_storage_lvextend is changed
+    - linux_base_storage_mount_fstype.stdout | trim in ['ext2', 'ext3', 'ext4']
+
+- name: Grow XFS filesystem after LV expansion
+  ansible.builtin.command:
+    cmd: "xfs_growfs {{ linux_base_storage_target.lv }}"
+  when:
+    - linux_base_storage_lvextend is changed
+    - linux_base_storage_mount_fstype.stdout | trim == 'xfs'
+
+- name: Record completion marker for storage expansion
+  ansible.builtin.copy:
+    dest: "{{ linux_base_storage_marker_path }}"
+    content: |
+      applied_by=linux-base-config
+      lv={{ linux_base_storage_target.lv }}
+      expand_by={{ linux_base_storage_target.expand_by }}
+      source={{ linux_base_storage_mount_source.stdout | trim }}
+      vg={{ linux_base_storage_mount_vg.stdout | trim }}
+      pv={{ linux_base_storage_pv_device }}
+    owner: root
+    group: root
+    mode: "0644"
+  when: linux_base_storage_lvextend is changed

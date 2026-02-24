@@ -1,0 +1,4 @@
+---
+# Renewing DHCP leases during provisioning can briefly disrupt SSH on some hosts.
+# Keep disabled by default; enable per-run/per-host if needed.
+linux_base_renew_dhcp_lease: false

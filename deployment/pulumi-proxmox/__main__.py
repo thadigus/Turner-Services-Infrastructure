@@ -12,9 +12,8 @@ import yaml
 
 @dataclass(frozen=True)
 class StoragePlan:
-    device: str
-    vg: str
-    lv_targets: Dict[str, str] = field(default_factory=dict)
+    lv: str
+    expand_by: str
 
 
 @dataclass(frozen=True)
@@ -27,6 +26,7 @@ class VmConfig:
     start_on_boot: bool
     vm_state: str
     template_name: Optional[str] = None
+    vm_type: Optional[str] = None
     vlan: Optional[int] = None
     disk_amount: Optional[int] = None
     disk_interface: str = "scsi0"
@@ -59,6 +59,8 @@ def _parse_size_gb(value: Any) -> Optional[int]:
         return int(value)
     if isinstance(value, str):
         raw = value.strip().lower()
+        if raw.startswith(("+", "=")):
+            raw = raw[1:].strip()
         if raw in {"", "none", "null"}:
             return None
         number = ""
@@ -93,27 +95,39 @@ def _parse_vm(raw: Dict[str, Any]) -> VmConfig:
         for entry in storage_plan_raw:
             if not isinstance(entry, dict):
                 continue
-            storage_plan.append(
-                StoragePlan(
-                    device=str(entry.get("device", "")),
-                    vg=str(entry.get("vg", "")),
-                    lv_targets=dict(entry.get("lv_targets") or {}),
-                )
-            )
+            lv = str(entry.get("lv", "")).strip()
+            expand_by = str(entry.get("expand_by", "")).strip()
+            # Backward compatibility for prior schema.
+            if not lv and isinstance(entry.get("lv_targets"), dict):
+                lv_targets = dict(entry.get("lv_targets") or {})
+                for legacy_lv, legacy_size in lv_targets.items():
+                    storage_plan.append(
+                        StoragePlan(
+                            lv=str(legacy_lv).strip(),
+                            expand_by=str(legacy_size).strip(),
+                        )
+                    )
+                continue
+            if lv and expand_by:
+                storage_plan.append(StoragePlan(lv=lv, expand_by=expand_by))
 
-    disk_amount = _parse_size_gb(raw.get("disk_amount"))
+    disk_amount_raw = raw.get("disk_amount")
+    disk_amount = _parse_size_gb(disk_amount_raw)
     planned_total = None
     if storage_plan:
         total = 0
         for plan in storage_plan:
-            for size in plan.lv_targets.values():
-                parsed = _parse_size_gb(size)
-                if parsed is None:
-                    continue
-                total += parsed
+            parsed = _parse_size_gb(plan.expand_by)
+            if parsed is None:
+                continue
+            total += parsed
         planned_total = total if total > 0 else None
     if disk_amount is None and planned_total is not None:
-        disk_amount = planned_total
+        template_name = str(raw.get("template_name") or "").lower()
+        # Use a migration-safe baseline so removing explicit disk_amount from
+        # existing 40G deployments does not cause shrink pressure.
+        template_base_disk_amount = 40
+        disk_amount = template_base_disk_amount + planned_total
     if disk_amount is not None and planned_total is not None and planned_total > disk_amount:
         raise ValueError(
             f"Storage plan total ({planned_total}G) exceeds disk_amount ({disk_amount}G) for VM '{name}'."
@@ -144,6 +158,7 @@ def _parse_vm(raw: Dict[str, Any]) -> VmConfig:
         start_on_boot=start_on_boot_value,
         vm_state=str(raw.get("vm_state", "present")).lower(),
         template_name=raw.get("template_name"),
+        vm_type=raw.get("vm_type") or raw.get("os_type"),
         vlan=vlan_value,
         disk_amount=disk_amount,
         disk_interface=str(raw.get("disk_interface", "scsi0")).strip() or "scsi0",
@@ -290,7 +305,7 @@ def _build_vm_resource(
     vm_args: Dict[str, Any] = {
         "name": vm.name,
         "node_name": vm.prox_node,
-        "cpu": {"cores": vm.cpu_count},
+        "cpu": {"cores": vm.cpu_count, "type": "x86-64-v3"},
         "memory": {"dedicated": vm.ram_amount},
         "agent": {
             "enabled": True,
@@ -402,18 +417,31 @@ def _resolve_stack_environment(config: pulumi.Config, server_list_file: Path) ->
     )
 
 
-def _build_vm_tags(stack_environment: str) -> List[str]:
+def _infer_vm_platform_tag(vm: VmConfig) -> str:
+    selector = " ".join(
+        [
+            str(vm.vm_type or ""),
+            str(vm.template_name or ""),
+            vm.name,
+        ]
+    ).lower()
+    if "windows" in selector or "win" in selector:
+        return "windows"
+    return "linux"
+
+
+def _build_vm_tags(stack_environment: str, vm: VmConfig) -> List[str]:
     # Proxmox normalizes/sorts tags, so keep deterministic order in code too.
-    return sorted(["pulumi", stack_environment.lower()])
+    return sorted(["pulumi", stack_environment.lower(), _infer_vm_platform_tag(vm)])
 
 
 config = pulumi.Config()
 server_list_file, inventory_file = _resolve_paths(config)
 server_list = load_server_list(server_list_file)
 stack_environment = _resolve_stack_environment(config, server_list_file)
-vm_tags = _build_vm_tags(stack_environment)
 
 proxmox_provider = _build_provider(inventory_file)
 
 for vm in server_list.virtual_machines:
+    vm_tags = _build_vm_tags(stack_environment, vm)
     _build_vm_resource(vm, server_list.template_node, proxmox_provider, vm_tags)

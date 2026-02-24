@@ -1,0 +1,22 @@
+###############################################
+## /deployment/base-config-pulumi.yml        ##
+###############################################
+#
+# Run base configuration against all Pulumi-managed VMs from the Proxmox
+# dynamic inventory, selecting the role by VM OS tag.
+
+---
+- name: Apply Linux base config to Pulumi-tagged Linux VMs
+  hosts: tag_pulumi:&tag_linux
+  become: yes
+  gather_facts: yes
+  roles:
+    - { role: linux-base-config }
+
+- name: Apply Windows base config to Pulumi-tagged Windows VMs
+  hosts: tag_pulumi:&tag_windows
+  gather_facts: yes
+  vars_files:
+    - ../turner-services-sensitive-repo/windows-vars.yml
+  roles:
+    - { role: windows-base-config }

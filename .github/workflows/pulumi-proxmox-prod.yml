@@ -2,8 +2,6 @@ name: Deploy Proxmox Prod (Pulumi)
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 13 * * *'  # Every Monday at 1 PM UTC → Sunday 8 AM ET
 
 jobs:
   deploy-proxmox-prod:
@@ -18,12 +16,11 @@ jobs:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
 
-      - name: Pulumi up (prod)
+      - name: Pulumi Up (production)
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
           PULUMI_BACKEND_URL: ${{ secrets.PULUMI_BACKEND_URL }}
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
-          PULUMI_STACK: ts-proxmox-prod
         run: |
           docker run --rm \
             --network host \
@@ -32,6 +29,5 @@ jobs:
             -e PULUMI_ACCESS_TOKEN \
             -e PULUMI_BACKEND_URL \
             -e PULUMI_CONFIG_PASSPHRASE \
-            -e PULUMI_STACK \
             ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-            bash -lc './run-pulumi.sh --prod -u'
+            bash -lc './run-pulumi-up.sh --prod -u'

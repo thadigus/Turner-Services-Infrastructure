@@ -1,0 +1,28 @@
+name: Run Base Config Across Environment
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 13 * * *'  # Daily at 13:00 UTC
+
+jobs:
+  run-base-config:
+    name: Run Base Config (All Pulumi VMs)
+    runs-on: self-hosted
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.ACCESS_TOKEN }}
+          submodules: recursive
+
+      - name: Run base config playbook
+        run: |
+          docker run --rm \
+            --network host \
+            -v "$PWD":/workspace \
+            -w /workspace \
+            ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
+            bash -lc 'ANSIBLE_CONFIG=/workspace/ansible.cfg ANSIBLE_ROLES_PATH=/workspace/roles ansible-playbook -i /workspace/turner-services-sensitive-repo/inventories/ansible-inv-rack.proxmox.yml /workspace/deployment/base-config-pulumi.yml --limit tag_pulumi:&tag_production'

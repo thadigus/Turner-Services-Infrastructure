@@ -1,0 +1,43 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ARG RUNNER_UID=1001
+ARG RUNNER_GID=1001
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    jq \
+    git \
+    docker.io \
+    sudo \
+    tar \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid "${RUNNER_GID}" runner && useradd --uid "${RUNNER_UID}" --gid "${RUNNER_GID}" --create-home --shell /bin/bash runner
+
+RUN mkdir -p /opt/actions-runner-dist
+WORKDIR /opt/actions-runner-dist
+
+# Resolve latest GitHub Actions runner version at build time, then install dependencies.
+RUN set -eux; \
+    RUNNER_VERSION="$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest | jq -r '.tag_name' | sed 's/^v//')"; \
+    echo "Installing GitHub Actions runner version ${RUNNER_VERSION}"; \
+    curl -fsSL -o actions-runner.tar.gz "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"; \
+    tar -xzf actions-runner.tar.gz; \
+    rm -f actions-runner.tar.gz; \
+    ./bin/installdependencies.sh
+
+# Install latest Docker Buildx plugin for docker buildx build --push workflows.
+RUN set -eux; \
+    BUILDX_VERSION="$(curl -fsSL https://api.github.com/repos/docker/buildx/releases/latest | jq -r '.tag_name')"; \
+    mkdir -p /usr/local/lib/docker/cli-plugins; \
+    curl -fsSL -o /usr/local/lib/docker/cli-plugins/docker-buildx "https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-amd64"; \
+    chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod 0755 /entrypoint.sh && chown -R runner:runner /opt/actions-runner-dist
+
+USER runner
+ENTRYPOINT ["/entrypoint.sh"]

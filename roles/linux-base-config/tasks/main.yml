@@ -5,9 +5,182 @@
 # Role for all Linux base configuration.
 
 ---
-- name: Set hostname of Ubuntu to ansible_hostname
+- name: Build prioritized server-list candidates for storage plans
+  ansible.builtin.set_fact:
+    linux_base_storage_plan_server_list_candidates: >-
+      {{
+        [playbook_dir ~ '/../turner-services-sensitive-repo/server-list-prod.yml',
+         playbook_dir ~ '/../turner-services-sensitive-repo/server-list-test.yml']
+        if 'tag_production' in group_names else
+        [playbook_dir ~ '/../turner-services-sensitive-repo/server-list-test.yml',
+         playbook_dir ~ '/../turner-services-sensitive-repo/server-list-prod.yml']
+        if 'tag_test' in group_names else
+        [playbook_dir ~ '/../turner-services-sensitive-repo/server-list-prod.yml',
+         playbook_dir ~ '/../turner-services-sensitive-repo/server-list-test.yml']
+      }}
+
+- name: Probe available server-list files for storage plans
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  register: linux_base_storage_plan_server_list_stats
+  loop: "{{ linux_base_storage_plan_server_list_candidates }}"
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: Select server-list file for storage plan lookup
+  ansible.builtin.set_fact:
+    linux_base_storage_plan_server_list_path: >-
+      {{
+        (linux_base_storage_plan_server_list_stats.results
+         | selectattr('stat.exists')
+         | map(attribute='item')
+         | list
+         | first) | default('')
+      }}
+  delegate_to: localhost
+  delegate_facts: true
+  run_once: true
+  become: false
+
+- name: Load storage-plan server list data
+  ansible.builtin.include_vars:
+    file: "{{ hostvars['localhost'].linux_base_storage_plan_server_list_path }}"
+    name: linux_base_storage_plan_server_list_data
+  when: hostvars['localhost'].linux_base_storage_plan_server_list_path | length > 0
+  delegate_to: localhost
+  delegate_facts: true
+  run_once: true
+  become: false
+
+- name: Resolve storage plan for this Linux VM
+  ansible.builtin.set_fact:
+    linux_base_storage_plan: >-
+      {{
+        (
+          hostvars['localhost'].linux_base_storage_plan_server_list_data.virtual_machines
+          | default([])
+          | selectattr('name', 'in', [inventory_hostname, inventory_hostname_short])
+          | map(attribute='storage_plan')
+          | first
+        ) | default([])
+      }}
+
+- name: Flatten storage plan targets for execution
+  ansible.builtin.set_fact:
+    linux_base_storage_targets: >-
+      {%- set out = [] -%}
+      {%- for plan in linux_base_storage_plan | default([]) -%}
+      {%-   if (plan.lv is defined) and (plan.expand_by is defined) -%}
+      {%-     set _ = out.append({
+                'lv': (plan.lv | string | trim),
+                'expand_by': (plan.expand_by | string | trim)
+              }) -%}
+      {%-   elif plan.lv_targets is defined -%}
+      {%-     for mount_path, size_value in (plan.lv_targets | default({})).items() -%}
+      {%-       set _ = out.append({
+                  'lv': (mount_path | string | trim),
+                  'expand_by': (size_value | string | trim)
+                }) -%}
+      {%-     endfor -%}
+      {%-   endif -%}
+      {%- endfor -%}
+      {{ out }}
+
+- name: Apply configured storage plan LV expansions
+  ansible.builtin.include_tasks: apply-storage-plan.yml
+  loop: "{{ linux_base_storage_targets | default([]) }}"
+  loop_control:
+    loop_var: linux_base_storage_target
+    label: "{{ linux_base_storage_target.lv }} => +{{ linux_base_storage_target.expand_by }}"
+  when: linux_base_storage_targets | default([]) | length > 0
+
+- name: Set system hostname
   hostname:
-    name: "{{ ansible_hostname }}"
+    name: "{{ inventory_hostname_short }}"
+
+- name: Ensure /etc/hostname contains desired hostname
+  copy:
+    dest: /etc/hostname
+    content: "{{ inventory_hostname_short }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Ensure /etc/hosts maps local hostname
+  lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.1\.1\s+'
+    line: "127.0.1.1 {{ inventory_hostname_short }}"
+    state: present
+    create: true
+
+- name: Ensure DHCP client sends host-name
+  lineinfile:
+    path: /etc/dhcp/dhclient.conf
+    regexp: '^\s*send\s+host-name\s*='
+    line: 'send host-name "{{ inventory_hostname_short }}";'
+    state: present
+    create: true
+
+- name: Ensure DHCP client sends FQDN hostname
+  lineinfile:
+    path: /etc/dhcp/dhclient.conf
+    regexp: '^\s*send\s+fqdn\.fqdn\s+'
+    line: 'send fqdn.fqdn "{{ inventory_hostname_short }}";'
+    state: present
+    create: true
+
+- name: Ensure NetworkManager conf.d directory exists
+  file:
+    path: /etc/NetworkManager/conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure NetworkManager DHCP hostname advertisement
+  copy:
+    dest: /etc/NetworkManager/conf.d/99-dhcp-hostname.conf
+    content: |
+      [connection]
+      ipv4.dhcp-send-hostname=true
+      ipv4.dhcp-hostname={{ inventory_hostname_short }}
+      ipv6.dhcp-send-hostname=true
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Ensure systemd-networkd config directory exists
+  file:
+    path: /etc/systemd/networkd.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure systemd-networkd DHCP hostname advertisement
+  copy:
+    dest: /etc/systemd/networkd.conf.d/99-dhcp-hostname.conf
+    content: |
+      [DHCPv4]
+      SendHostname=true
+      Hostname={{ inventory_hostname_short }}
+      UseHostname=false
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Attempt DHCP lease renew so hostname updates upstream
+  shell: |
+    if command -v dhclient >/dev/null 2>&1; then
+      dhclient -r || true
+      dhclient || true
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: false
+  when: linux_base_renew_dhcp_lease | bool
 
 - name: Ensure Sudo Package is Installed
   package:
