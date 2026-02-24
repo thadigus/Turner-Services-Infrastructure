@@ -53,6 +53,57 @@ pulumi config set inventoryPath ../../turner-services-sensitive-repo/inventories
 pulumi up
 ```
 
+## Interactive Deploy Script
+
+Use the helper script to choose `test`, `production`, or `both`:
+
+```bash
+./run-pulumi-up.sh
+```
+
+To run `pulumi up` instead of preview:
+
+```bash
+./run-pulumi-up.sh -u
+```
+
+To run `pulumi destroy`:
+
+```bash
+./run-pulumi-up.sh -d
+```
+
+For CI/non-interactive runs:
+
+```bash
+./run-pulumi-up.sh --test
+./run-pulumi-up.sh --prod
+./run-pulumi-up.sh --both
+./run-pulumi-up.sh --both -u
+./run-pulumi-up.sh --test -d
+```
+
+Behavior:
+
+- Accepts target flags: `--test`, `--prod`/`--production`, `--both`
+- Prompts for deployment target only if no target flag is provided
+- Sets per-stack `serverListPath`
+- Sets per-stack `environment` (used for VM tags)
+- Runs `pulumi preview` for the selected stack(s) by default
+- Runs `pulumi up --yes` when `-u`/`--up` is provided
+  - After each successful `up`, runs:
+    - `ansible-playbook -i <inventory> ../linux-base-config-pulumi.yml --limit tag_pulumi:&tag_<environment>`
+    - `<environment>` is `test` or `production` based on the selected stack
+  - After base config, reboots only VMs with meaningful Pulumi VM changes
+    (`created`/`updated`/`replaced`) by running:
+    - `ansible-playbook -i <inventory> ../reboot-linux-hosts.yml --limit <changed_vm_names>`
+- Runs `pulumi destroy --yes` when `-d`/`--destroy` is provided
+
+Optional stack-name overrides:
+
+- `PULUMI_TEST_STACK=<your-test-stack>`
+- `PULUMI_PROD_STACK=<your-prod-stack>`
+
 ## Configuration Files
 
 The program looks for these paths by default, in order:
@@ -68,8 +119,23 @@ You can override these with Pulumi config values:
 
 - `serverListPath`
 - `inventoryPath`
+- `environment` (`production` or `test`) for VM tagging
 You can also override the server list via env var `TS_SERVER_LIST_PATH`, which
 is useful for local/dev runs.
+
+## VM Tags
+
+All VMs created by this Pulumi program are tagged with:
+
+- `pulumi`
+- `production` for production stacks
+- `test` for test stacks
+
+Environment is resolved from (in order):
+
+1) `pulumi config set environment production|test`
+2) stack name (`pulumi stack`)
+3) server-list filename (`server-list-prod.yml` / `server-list-test.yml`)
 
 ## Server List Schema (YAML)
 

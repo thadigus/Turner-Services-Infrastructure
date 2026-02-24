@@ -8,6 +8,29 @@
 - hosts: all
   gather_facts: yes
   become: yes
+  tasks:
+    - name: Truncate /etc/machine-id for first boot regeneration on clones
+      copy:
+        content: ""
+        dest: /etc/machine-id
+        owner: root
+        group: root
+        mode: "0444"
+
+    - name: Remove stale /var/lib/dbus/machine-id before relinking
+      file:
+        path: /var/lib/dbus/machine-id
+        state: absent
+
+    - name: Link /var/lib/dbus/machine-id to /etc/machine-id
+      file:
+        src: /etc/machine-id
+        dest: /var/lib/dbus/machine-id
+        state: link
+
+- hosts: all
+  gather_facts: yes
+  become: yes
   roles:
     - { role: deploy-turnerans_svc }
     - { role: linux-base-config }

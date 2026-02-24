@@ -7,19 +7,9 @@
 template_node: prox4
 
 virtual_machines:
-  - name: windows-testing
-    template_name: 'windows-base-image'
-    prox_node: prox2
-    storage_location: NFS-ProdVolRepl
-    cpu_count: 2
-    ram_amount: 4096
-    disk_amount: 20
-    vlan: 3
-    start_on_boot: True
-    vm_state: present
-  - name: rhel-testing
-    template_name: 'rhel-base-image'
-    prox_node: prox4
+  - name: k8s-test-control-01
+    template_name: 'ubuntu-base-image'
+    prox_node: prox3
     storage_location: NFS-ProdVolRepl
     cpu_count: 2
     ram_amount: 4096
@@ -27,9 +17,9 @@ virtual_machines:
     vlan: 3
     start_on_boot: True
     vm_state: present
-  - name: ubuntu-testing
+  - name: k8s-test-worker-01
     template_name: 'ubuntu-base-image'
-    prox_node: prox3
+    prox_node: prox4
     storage_location: NFS-ProdVolRepl
     cpu_count: 2
     ram_amount: 4096

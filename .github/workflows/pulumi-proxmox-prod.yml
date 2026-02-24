@@ -34,4 +34,4 @@ jobs:
             -e PULUMI_CONFIG_PASSPHRASE \
             -e PULUMI_STACK \
             ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-            bash -lc 'pulumi stack select "${PULUMI_STACK}"; pulumi up -y'
+            bash -lc './run-pulumi.sh --prod -u'

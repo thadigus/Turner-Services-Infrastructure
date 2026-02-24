@@ -1,0 +1,14 @@
+###############################################
+## /deployment/linux-base-config-pulumi.yml  ##
+###############################################
+#
+# Run Linux base configuration against all VMs tagged with "pulumi"
+# from the Proxmox dynamic inventory.
+
+---
+- name: Apply Linux base config to Pulumi-tagged VMs
+  hosts: tag_pulumi
+  become: yes
+  gather_facts: yes
+  roles:
+    - { role: linux-base-config }

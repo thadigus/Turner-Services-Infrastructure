@@ -1,10 +1,8 @@
 FROM registry.access.redhat.com/ubi9/ubi:latest
-ARG UID=1000
-ARG GID=1000
 WORKDIR /workspace
-COPY ../../collections/requirements.yml /tmp/requirements.yml
-COPY ../../requirements.txt /tmp/requirements.txt
-COPY ../../deployment/pulumi-proxmox/requirements.txt /tmp/pulumi-proxmox-requirements.txt
+COPY ./collections/requirements.yml /tmp/requirements.yml
+COPY ./requirements.txt /tmp/requirements.txt
+COPY ./deployment/pulumi-proxmox/requirements.txt /tmp/pulumi-proxmox-requirements.txt
 
 # Installing Python Git and Ansible
 RUN dnf update -y
@@ -24,8 +22,8 @@ RUN dnf -y install packer
 CMD ["/bin/bash"]
 
 # Create the turneradmin user as an administrator
-RUN groupadd -g ${GID} turneradmin
-RUN useradd -s /bin/bash -m -u ${UID} -g turneradmin turneradmin
+RUN groupadd turneradmin
+RUN useradd -s /bin/bash -m -g turneradmin turneradmin
 RUN chown turneradmin:turneradmin /workspace
 RUN echo "turneradmin ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/turneradmin
 # Prepare home and ~/.ssh
