@@ -43,7 +43,7 @@ jobs:
       options: --user root
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
@@ -54,79 +54,62 @@ jobs:
     name: Ubuntu Packer Build
     runs-on: self-hosted
     needs: download-isos
+    container:
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --network host --user root
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
       - name: Run Ubuntu Packer script
-        run: |
-          docker run --rm \
-          --network host \
-          --user root \
-          -v "$PWD":/workspace \
-          -w /workspace \
-          ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-          bash images/build-scripts/ubuntu-packer-build-rack.sh
+        run: bash images/build-scripts/ubuntu-packer-build-rack.sh
 
   rhel-packer-build:
     name: RHEL Packer Build
     runs-on: self-hosted
     needs: download-isos
+    container:
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --network host --user root
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
       - name: Run RHEL Packer script
-        run: |
-          docker run --rm \
-          --network host \
-          --user root \
-          -v "$PWD":/workspace \
-          -w /workspace \
-          ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-          bash images/build-scripts/rhel-packer-build-rack.sh
+        run: bash images/build-scripts/rhel-packer-build-rack.sh
 
   windows-packer-build:
     name: Windows Packer Build
     runs-on: self-hosted
     needs: download-isos
+    container:
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --network host --user root
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
       - name: Run Windows Packer script
-        run: |
-          docker run --rm \
-          --network host \
-          --user root \
-          -v "$PWD":/workspace \
-          -w /workspace \
-          ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-          bash images/build-scripts/windows-packer-build-rack.sh
+        run: bash images/build-scripts/windows-packer-build-rack.sh
 
   kali-packer-build:
     name: Kali Packer Build
     runs-on: self-hosted
     needs: download-isos
+    container:
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --network host --user root
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
       - name: Run Kali Packer script
-        run: |
-          docker run --rm \
-          --network host \
-          --user root \
-          -v "$PWD":/workspace \
-          -w /workspace \
-          ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-          bash images/build-scripts/kali-packer-build-rack.sh
-          
+        run: bash images/build-scripts/kali-packer-build-rack.sh

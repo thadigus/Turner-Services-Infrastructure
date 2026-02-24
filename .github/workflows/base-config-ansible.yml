@@ -9,20 +9,20 @@ jobs:
   run-base-config:
     name: Run Base Config (All Pulumi VMs)
     runs-on: self-hosted
+    container:
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --network host
     permissions:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
 
       - name: Run base config playbook
-        run: |
-          docker run --rm \
-            --network host \
-            -v "$PWD":/workspace \
-            -w /workspace \
-            ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-            bash -lc 'ANSIBLE_CONFIG=/workspace/ansible.cfg ANSIBLE_ROLES_PATH=/workspace/roles ansible-playbook -i /workspace/turner-services-sensitive-repo/inventories/ansible-inv-rack.proxmox.yml /workspace/deployment/base-config-pulumi.yml --limit tag_pulumi:&tag_production'
+        env:
+          ANSIBLE_CONFIG: ansible.cfg
+          ANSIBLE_ROLES_PATH: roles
+        run: ansible-playbook -i turner-services-sensitive-repo/inventories/ansible-inv-rack.proxmox.yml deployment/base-config-pulumi.yml --limit tag_pulumi:&tag_production

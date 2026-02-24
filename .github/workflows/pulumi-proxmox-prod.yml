@@ -7,11 +7,14 @@ jobs:
   deploy-proxmox-prod:
     name: Deploy Proxmox Prod
     runs-on: self-hosted
+    container:
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --network host
     permissions:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
@@ -21,13 +24,5 @@ jobs:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
           PULUMI_BACKEND_URL: ${{ secrets.PULUMI_BACKEND_URL }}
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
-        run: |
-          docker run --rm \
-            --network host \
-            -v "$PWD":/workspace \
-            -w /workspace/deployment/pulumi-proxmox \
-            -e PULUMI_ACCESS_TOKEN \
-            -e PULUMI_BACKEND_URL \
-            -e PULUMI_CONFIG_PASSPHRASE \
-            ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-            bash -lc './run-pulumi-up.sh --prod -u'
+        working-directory: deployment/pulumi-proxmox
+        run: ./run-pulumi-up.sh --prod -u
