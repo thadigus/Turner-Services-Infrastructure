@@ -27,6 +27,7 @@
         src: /etc/machine-id
         dest: /var/lib/dbus/machine-id
         state: link
+      when: ansible_facts['os_family'] == "Debian"
 
 - hosts: all
   gather_facts: yes
