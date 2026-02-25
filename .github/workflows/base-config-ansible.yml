@@ -25,4 +25,4 @@ jobs:
         env:
           ANSIBLE_CONFIG: ansible.cfg
           ANSIBLE_ROLES_PATH: roles
-        run: ansible-playbook -i turner-services-sensitive-repo/inventories/ansible-inv-rack.proxmox.yml deployment/base-config-pulumi.yml --limit tag_pulumi:&tag_production
+        run: ansible-playbook -i turner-services-sensitive-repo/inventories/ansible-inv-rack.proxmox.yml deployment/base-config-pulumi.yml --limit 'tag_pulumi:&tag_production'
