@@ -23,5 +23,4 @@ jobs:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
           PULUMI_BACKEND_URL: ${{ secrets.PULUMI_BACKEND_URL }}
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
-        working-directory: deployment/pulumi-proxmox
-        run: ./run-pulumi-up.sh --prod -u
+        run: ./deployment/pulumi-proxmox/run-pulumi-up.sh --prod -u
