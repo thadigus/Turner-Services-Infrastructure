@@ -11,6 +11,7 @@ jobs:
     runs-on: self-hosted
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --user root
     permissions:
       contents: read
     steps:
