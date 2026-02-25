@@ -9,7 +9,7 @@ jobs:
     runs-on: self-hosted
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
-      options: --user root
+      options: --user 1001:1001
     permissions:
       contents: read
     steps:
@@ -25,4 +25,6 @@ jobs:
           PULUMI_BACKEND_URL: ${{ secrets.PULUMI_BACKEND_URL }}
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
         working-directory: deployment/pulumi-proxmox
-        run: bash ./run-pulumi-up.sh --prod -u
+        run: |
+          export PATH="/home/turneradmin/.pulumi/bin:${PATH}"
+          bash ./run-pulumi-up.sh --prod -u
