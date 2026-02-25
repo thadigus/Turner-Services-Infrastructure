@@ -1,2 +1,2 @@
 #!/bin/bash
-ansible-playbook /workspace/images/download-isos.yml
+ansible-playbook /workspaces/Turner-Services-Infrastructure/images/download-isos.yml
