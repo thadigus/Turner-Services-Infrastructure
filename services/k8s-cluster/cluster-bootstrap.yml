@@ -1,0 +1,630 @@
+########################################################
+## /services/k8s-cluster/cluster-bootstrap.yml        ##
+########################################################
+# Shared bootstrap for Kubernetes clusters using kubeadm/containerd.
+
+---
+- name: Prepare Kubernetes nodes
+  hosts: "{{ k8s_control_host_pattern }}:{{ k8s_worker_host_pattern }}"
+  become: yes
+  gather_facts: yes
+  vars_files:
+    - ../../turner-services-sensitive-repo/k8s-vars.yml
+  vars:
+    k8s_channel_version: "{{ lookup('ansible.builtin.env', 'K8S_CHANNEL_VERSION') | default('1.35', true) | trim }}"
+    k8s_pause_image: "{{ lookup('ansible.builtin.env', 'K8S_PAUSE_IMAGE') | default('k8s.gcr.io/pause:3.9', true) | trim }}"
+  tasks:
+    - name: Install Kubernetes node dependencies
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gpg
+          - containerd
+        state: present
+        update_cache: true
+
+    - name: Disable swap immediately
+      ansible.builtin.command: swapoff -a
+      changed_when: false
+
+    - name: Disable swap in fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^(?!#)([^\n]*\s+swap\s+[^\n]*)$'
+        replace: '# \1'
+
+    - name: Delete lvswap Logical Volume if it exists
+      lvol:
+        vg: vgroot
+        lv: lvswap
+        state: absent
+        force: true
+    
+    - name: Ensure required Kubernetes kernel modules are loaded
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - br_netfilter
+        - overlay
+    
+    - name: Configure required Kubernetes sysctl settings
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop:
+        - { name: "net.ipv4.ip_forward", value: "1" }
+        - { name: "net.bridge.bridge-nf-call-iptables", value: "1" }
+        - { name: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
+        - { name: "vm.overcommit_memory", value: "1" }
+        - { name: "kernel.panic", value: "10" }
+        - { name: "kernel.panic_on_oops", value: "1" }
+    
+    - name: Allow Kubernetes control plane and node traffic via UFW
+      ansible.builtin.ufw:
+        rule: allow
+        proto: tcp
+        port: "{{ item.port }}"
+        from_ip: 10.0.3.0/24
+      loop:
+        - { port: 6443 }    # Kubernetes API server
+        - { port: 2379 }    # etcd client
+        - { port: 2380 }    # etcd server peer
+        - { port: 10250 }   # Kubelet API
+        - { port: 10251 }   # kube-scheduler
+        - { port: 10252 }   # kube-controller-manager
+        - { port: 10255 }   # Read-only kubelet metrics (if needed)
+
+    - name: Ensure apt keyring directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install Kubernetes apt repository key
+      ansible.builtin.get_url:
+        url: "https://pkgs.k8s.io/core:/stable:/v{{ k8s_channel_version }}/deb/Release.key"
+        dest: /etc/apt/keyrings/kubernetes-apt-keyring.asc
+        mode: "0644"
+
+    - name: Configure Kubernetes apt repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/v{{ k8s_channel_version }}/deb/ /"
+        filename: kubernetes
+        state: present
+
+    - name: Install kubeadm stack packages
+      ansible.builtin.apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+        update_cache: true
+
+    - name: Ensure containerd config directory exists
+      ansible.builtin.file:
+        path: /etc/containerd
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Write Kubernetes-compatible containerd config
+      ansible.builtin.copy:
+        dest: /etc/containerd/config.toml
+        mode: "0644"
+        content: |
+          version = 2
+
+          [plugins."io.containerd.grpc.v1.cri"]
+            sandbox_image = "{{ k8s_pause_image }}"
+
+            [plugins."io.containerd.grpc.v1.cri".containerd]
+              default_runtime_name = "runc"
+
+              [plugins."io.containerd.grpc.v1.cri".containerd.runtimes]
+                [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
+                  runtime_type = "io.containerd.runc.v2"
+                  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+                    SystemdCgroup = true
+      notify: Restart containerd
+
+    - name: Validate containerd config
+      ansible.builtin.command:
+        cmd: containerd --config /etc/containerd/config.toml config dump
+      changed_when: false
+
+    - name: Enable and start containerd
+      ansible.builtin.systemd:
+        name: containerd
+        enabled: true
+        state: started
+
+    - name: Enable kubelet service
+      ansible.builtin.systemd:
+        name: kubelet
+        enabled: true
+        state: started
+
+  handlers:
+    - name: Restart containerd
+      ansible.builtin.systemd:
+        name: containerd
+        state: restarted
+
+# - name: Configure kube-vip static pod on control plane nodes
+#   hosts: "{{ k8s_control_host_pattern }}"
+#   become: yes
+#   gather_facts: yes
+#   vars_files:
+#     - ../../turner-services-sensitive-repo/k8s-vars.yml
+#   vars:
+#     k8s_use_kube_vip_effective: "{{ (k8s_use_kube_vip | default(lookup('ansible.builtin.env', 'K8S_USE_KUBE_VIP') | default('false', true))) | bool }}"
+#     k8s_kube_vip_address_effective: "{{ lookup('ansible.builtin.env', 'K8S_KUBEVIP_ADDRESS') | default(k8s_kube_vip_address | default(''), true) | trim }}"
+#     k8s_kube_vip_interface_env: "{{ lookup('ansible.builtin.env', 'K8S_KUBEVIP_INTERFACE') | default('', true) | trim }}"
+#     k8s_kube_vip_version: "{{ lookup('ansible.builtin.env', 'K8S_KUBEVIP_VERSION') | default('v0.8.2', true) | trim }}"
+#   tasks:
+#     - name: Validate kube-vip address when enabled
+#       ansible.builtin.assert:
+#         that:
+#           - k8s_kube_vip_address_effective | length > 0
+#         fail_msg: "K8S_KUBEVIP_ADDRESS (or k8s_kube_vip_address) is required when kube-vip is enabled."
+#       when: k8s_use_kube_vip_effective | bool
+
+#     - name: Resolve kube-vip interface
+#       ansible.builtin.set_fact:
+#         k8s_kube_vip_interface: "{{ k8s_kube_vip_interface_env if (k8s_kube_vip_interface_env | length > 0) else ansible_default_ipv4.interface }}"
+#       when: k8s_use_kube_vip_effective | bool
+
+#     - name: Ensure static pod manifest directory exists
+#       ansible.builtin.file:
+#         path: /etc/kubernetes/manifests
+#         state: directory
+#         owner: root
+#         group: root
+#         mode: "0755"
+#       when: k8s_use_kube_vip_effective | bool
+
+#     - name: Pull kube-vip image
+#       ansible.builtin.command:
+#         cmd: "ctr --namespace k8s.io images pull ghcr.io/kube-vip/kube-vip:{{ k8s_kube_vip_version }}"
+#       changed_when: false
+#       when: k8s_use_kube_vip_effective | bool
+
+#     - name: Generate kube-vip static pod manifest
+#       ansible.builtin.command:
+#         cmd: >-
+#           ctr --namespace k8s.io run --rm --net-host ghcr.io/kube-vip/kube-vip:{{ k8s_kube_vip_version }} vip /kube-vip manifest pod
+#           --interface {{ k8s_kube_vip_interface }}
+#           --address {{ k8s_kube_vip_address_effective }}
+#           --controlplane
+#           --services
+#           --arp
+#           --leaderElection
+#           --taint
+#           --inCluster
+#       register: k8s_kubevip_manifest
+#       changed_when: false
+#       when: k8s_use_kube_vip_effective | bool
+
+#     - name: Install kube-vip static pod manifest
+#       ansible.builtin.copy:
+#         dest: /etc/kubernetes/manifests/kube-vip.yaml
+#         owner: root
+#         group: root
+#         mode: "0644"
+#         content: "{{ k8s_kubevip_manifest.stdout }}"
+#       when: k8s_use_kube_vip_effective | bool
+
+- name: Initialize first control plane node
+  hosts: "{{ k8s_control_host_pattern }}"
+  become: yes
+  gather_facts: yes
+  vars_files:
+    - ../../turner-services-sensitive-repo/k8s-vars.yml
+  vars:
+    k8s_first_control_host: "{{ ansible_play_hosts_all | first }}"
+  tasks:
+    - name: Ensure Kubernetes configuration directory exists on first control node
+      file:
+        path: /etc/kubernetes
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Ensure Kubernetes audit log directory exists
+      file:
+        path: /var/log/kubernetes/audit
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Install audit policy for API server
+      copy:
+        dest: /etc/kubernetes/audit-policy.yaml
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          apiVersion: audit.k8s.io/v1
+          kind: Policy
+          rules:
+            - level: Metadata
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Write kubeadm init configuration
+      copy:
+        dest: /etc/kubernetes/kubeadm-config.yaml
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          apiVersion: kubeadm.k8s.io/v1beta4
+          kind: InitConfiguration
+          nodeRegistration:
+            criSocket: unix:///run/containerd/containerd.sock
+          ---
+          apiVersion: kubeadm.k8s.io/v1beta4
+          kind: ClusterConfiguration
+          clusterName: "{{ k8s_cluster_name }}"
+          kubernetesVersion: stable
+          controlPlaneEndpoint: "{{ k8s_kube_control_endpoint }}"
+          networking:
+            podSubnet: "{{ k8s_pod_subnet }}"
+            serviceSubnet: "{{ k8s_service_subnet }}"
+          apiServer:
+            extraArgs:
+              - name: authorization-mode
+                value: "Node,RBAC"
+              - name: enable-admission-plugins
+                value: "NodeRestriction,PodSecurity"
+          controllerManager:
+            extraArgs:
+              - name: profiling
+                value: "false"
+          scheduler:
+            extraArgs:
+              - name: profiling
+                value: "false"
+          ---
+          apiVersion: kubelet.config.k8s.io/v1beta1
+          kind: KubeletConfiguration
+          cgroupDriver: systemd
+          serverTLSBootstrap: true
+          rotateCertificates: true
+          protectKernelDefaults: true
+          readOnlyPort: 0
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Check if control plane already initialized
+      ansible.builtin.stat:
+        path: /etc/kubernetes/admin.conf
+      register: k8s_admin_conf
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Check health of existing control plane
+      ansible.builtin.command:
+        cmd: kubectl --kubeconfig /etc/kubernetes/admin.conf get --raw=/readyz
+      register: k8s_existing_apiserver_ready
+      changed_when: false
+      failed_when: false
+      when:
+        - inventory_hostname == k8s_first_control_host
+        - k8s_admin_conf.stat.exists
+
+    - name: Mark whether first control node needs kubeadm re-init
+      ansible.builtin.set_fact:
+        k8s_control_plane_needs_reinit: "{{ k8s_admin_conf.stat.exists and (k8s_existing_apiserver_ready.rc | default(1)) != 0 }}"
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Reset failed/partial kubeadm state on first control node
+      ansible.builtin.command:
+        cmd: kubeadm reset -f
+      when:
+        - inventory_hostname == k8s_first_control_host
+        - k8s_control_plane_needs_reinit | default(false)
+
+    - name: Clean stale CNI config after kubeadm reset
+      ansible.builtin.file:
+        path: /etc/cni/net.d
+        state: absent
+      when:
+        - inventory_hostname == k8s_first_control_host
+        - k8s_control_plane_needs_reinit | default(false)
+
+    - name: Recreate CNI config directory
+      ansible.builtin.file:
+        path: /etc/cni/net.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when:
+        - inventory_hostname == k8s_first_control_host
+        - k8s_control_plane_needs_reinit | default(false)
+
+    - name: Initialize Kubernetes control plane
+      ansible.builtin.command:
+        cmd: kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --upload-certs
+      when:
+        - inventory_hostname == k8s_first_control_host
+        - (not k8s_admin_conf.stat.exists) or (k8s_control_plane_needs_reinit | default(false))
+
+    - name: Ensure kubeconfig directory exists for root
+      ansible.builtin.file:
+        path: /root/.kube
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Copy admin kubeconfig for service user
+      ansible.builtin.copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /root/.kube/config
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0600"
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Ensure kubeconfig directory exists for service user
+      ansible.builtin.file:
+        path: /home/turnerans_svc/.kube
+        state: directory
+        owner: turnerans_svc
+        group: turnerans_svc
+        mode: "0700"
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Copy admin kubeconfig for service user
+      ansible.builtin.copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/turnerans_svc/.kube/config
+        remote_src: true
+        owner: turnerans_svc
+        group: turnerans_svc
+        mode: "0600"
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Wait for Kubernetes API server to report ready
+      ansible.builtin.command:
+        cmd: kubectl --kubeconfig /etc/kubernetes/admin.conf get --raw=/readyz
+      register: k8s_apiserver_ready
+      changed_when: false
+      retries: 30
+      delay: 10
+      until: k8s_apiserver_ready.rc == 0
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Install Calico CNI
+      ansible.builtin.command:
+        cmd: kubectl --kubeconfig /etc/kubernetes/admin.conf apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.2/manifests/calico.yaml
+      register: k8s_calico_apply
+      changed_when: "'created' in k8s_calico_apply.stdout or 'configured' in k8s_calico_apply.stdout"
+      retries: 6
+      delay: 10
+      until: k8s_calico_apply.rc == 0
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Set Calico IPv4 Pool CIDR
+      ansible.builtin.command:
+        cmd: kubectl --kubeconfig /etc/kubernetes/admin.conf -n kube-system set env daemonset/calico-node CALICO_IPV4POOL_CIDR={{ k8s_pod_subnet }}
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Enforce restricted Pod Security level on default namespace
+      ansible.builtin.command:
+        cmd: >-
+          kubectl --kubeconfig /etc/kubernetes/admin.conf label namespace default
+          pod-security.kubernetes.io/enforce=restricted
+          pod-security.kubernetes.io/audit=restricted
+          pod-security.kubernetes.io/warn=restricted
+          --overwrite
+      changed_when: false
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Ensure workloads namespace exists
+      ansible.builtin.command:
+        cmd: kubectl --kubeconfig /etc/kubernetes/admin.conf create namespace workloads
+      register: k8s_workloads_ns
+      failed_when: k8s_workloads_ns.rc != 0 and ('AlreadyExists' not in k8s_workloads_ns.stderr)
+      changed_when: "'created' in k8s_workloads_ns.stdout"
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Enforce restricted Pod Security on workloads namespace
+      ansible.builtin.command:
+        cmd: >-
+          kubectl --kubeconfig /etc/kubernetes/admin.conf label namespace workloads
+          pod-security.kubernetes.io/enforce=restricted
+          pod-security.kubernetes.io/audit=restricted
+          pod-security.kubernetes.io/warn=restricted
+          --overwrite
+      changed_when: false
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Generate worker join command
+      ansible.builtin.command:
+        cmd: kubeadm token create --print-join-command
+      register: k8s_join_cmd
+      changed_when: false
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Generate control plane certificate key
+      ansible.builtin.command:
+        cmd: kubeadm init phase upload-certs --upload-certs
+      register: k8s_upload_certs
+      changed_when: false
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Save join commands for other plays
+      ansible.builtin.set_fact:
+        k8s_join_command_worker: "{{ k8s_join_cmd.stdout | trim }}"
+        k8s_join_command_control: "{{ (k8s_join_cmd.stdout | trim) ~ ' --control-plane --certificate-key ' ~ ((k8s_upload_certs.stdout_lines | select('match', '^[a-f0-9]{64}$') | list | last) | default('')) }}"
+      run_once: true
+      delegate_to: localhost
+      delegate_facts: true
+      when: inventory_hostname == k8s_first_control_host
+
+    - name: Validate control plane join command when multiple controllers exist
+      ansible.builtin.assert:
+        that:
+          - hostvars['localhost'].k8s_join_command_control is match('.*--certificate-key\\s+[a-f0-9]{64}.*')
+        fail_msg: "Failed to generate a valid control-plane join command with certificate key."
+      run_once: true
+      delegate_to: localhost
+      when:
+        - inventory_hostname == k8s_first_control_host
+        - ansible_play_hosts_all | length > 1
+
+    - name: Expose kube control endpoint for delegation
+      set_fact:
+        k8s_kube_control_endpoint_local: "{{ k8s_kube_control_endpoint }}"
+        k8s_first_control_host_resolved: "{{ k8s_first_control_host }}"
+      run_once: true
+      delegate_to: localhost
+      delegate_facts: true
+
+# - name: Join additional control plane nodes
+#   hosts: "{{ k8s_control_host_pattern }}"
+#   become: yes
+#   gather_facts: yes
+#   vars:
+#     k8s_first_control_host: "{{ ansible_play_hosts_all | first }}"
+#   tasks:
+#     - name: Check if node already joined as control plane
+#       ansible.builtin.stat:
+#         path: /etc/kubernetes/kubelet.conf
+#       register: k8s_control_join_state
+
+#     - name: Wait for Kubernetes API endpoint from control-plane joiner
+#       ansible.builtin.wait_for:
+#         host: "{{ (hostvars['localhost'].k8s_control_endpoint | regex_replace(':.*$', '')) }}"
+#         port: "{{ (hostvars['localhost'].k8s_control_endpoint | regex_search(':(\\d+)$', '\\1') | first | default('6443')) | int }}"
+#         timeout: 300
+#       when:
+#         - inventory_hostname != k8s_first_control_host
+#         - not k8s_control_join_state.stat.exists
+
+#     - name: Join node to control plane
+#       ansible.builtin.command:
+#         cmd: "{{ hostvars['localhost'].k8s_join_command_control }}"
+#       register: k8s_control_join_result
+#       retries: 5
+#       delay: 20
+#       until: k8s_control_join_result.rc == 0
+#       when:
+#         - inventory_hostname != k8s_first_control_host
+#         - not k8s_control_join_state.stat.exists
+
+- name: Join worker nodes
+  hosts: "{{ k8s_worker_host_pattern }}"
+  become: yes
+  gather_facts: yes
+  tasks:
+    # - name: Validate first control host is discoverable for join token refresh
+    #   ansible.builtin.assert:
+    #     that:
+    #       - hostvars['localhost'].k8s_first_control_host_resolved is defined
+    #       - hostvars['localhost'].k8s_first_control_host_resolved | length > 0
+    #     fail_msg: "Unable to determine first control host for worker join token refresh."
+    #   run_once: true
+    #   delegate_to: localhost
+
+    - name: Refresh worker join command from current control plane
+      ansible.builtin.command:
+        cmd: kubeadm token create --print-join-command
+      register: k8s_join_cmd_refresh
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ hostvars['localhost'].k8s_first_control_host_resolved }}"
+
+    - name: Store refreshed worker join command
+      ansible.builtin.set_fact:
+        k8s_join_command_worker_refreshed: "{{ k8s_join_cmd_refresh.stdout | trim }}"
+      run_once: true
+      delegate_to: localhost
+      delegate_facts: true
+
+    - name: Check if node already joined as worker
+      ansible.builtin.stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: k8s_worker_join_state
+
+    - name: Wait for Kubernetes API endpoint from worker
+      ansible.builtin.wait_for:
+        host: "{{ hostvars['localhost'].k8s_kube_control_endpoint_local | regex_replace(':.*$', '') }}"
+        port: "{{ (hostvars['localhost'].k8s_kube_control_endpoint_local | regex_search(':(\\d+)$', '\\1') | first | default('6443')) | int }}"
+        timeout: 300
+      when: not k8s_worker_join_state.stat.exists
+
+    - name: Join node to cluster with recovery
+      block:
+        - name: Join node to cluster (primary attempt)
+          ansible.builtin.command:
+            cmd: "{{ hostvars['localhost'].k8s_join_command_worker_refreshed }}"
+          register: k8s_worker_join_result
+          retries: 3
+          delay: 20
+          until: k8s_worker_join_result.rc == 0
+      rescue:
+        - name: Reset worker kubeadm state after failed join
+          ansible.builtin.command:
+            cmd: kubeadm reset -f
+          changed_when: true
+
+        - name: Recreate worker CNI config directory after reset
+          ansible.builtin.file:
+            path: /etc/cni/net.d
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: Join node to cluster (retry after reset)
+          ansible.builtin.command:
+            cmd: "{{ hostvars['localhost'].k8s_join_command_worker_refreshed }}"
+      when: not k8s_worker_join_state.stat.exists
+
+- name: Save kubeconfig for external use
+  hosts: "{{ k8s_control_host_pattern }}"
+  become: yes
+  gather_facts: yes
+  vars_files:
+    - ../../turner-services-sensitive-repo/k8s-vars.yml
+  vars:
+    k8s_first_control_host: "{{ ansible_play_hosts_all | first }}"
+    k8s_config_local_path: "../../turner-services-sensitive-repo/kubeconfigs"
+  tasks:
+    - name: Ensure local kubeconfig directory exists
+      delegate_to: localhost
+      become: false
+      file:
+        path: "{{ k8s_config_local_path }}"
+        state: directory
+        mode: '0700'
+
+    - name: Pull kubeconfig from control plane to Ansible runner
+      become: true
+      fetch:
+        src: /etc/kubernetes/admin.conf
+        dest: "{{ k8s_config_local_path }}/{{ k8s_cluster_name }}.conf"
+        flat: true
+
+    - name: Restrict local kubeconfig permissions on Ansible runner
+      delegate_to: localhost
+      become: false
+      file:
+        path: "{{ k8s_config_local_path }}/{{ k8s_cluster_name }}.conf"
+        mode: '0600'

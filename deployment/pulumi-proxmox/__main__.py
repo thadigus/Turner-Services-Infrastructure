@@ -28,6 +28,7 @@ class VmConfig:
     template_name: Optional[str] = None
     vm_type: Optional[str] = None
     vlan: Optional[int] = None
+    mac_address: Optional[str] = None
     disk_amount: Optional[int] = None
     disk_interface: str = "scsi0"
     storage_plan: List[StoragePlan] = field(default_factory=list)
@@ -149,6 +150,17 @@ def _parse_vm(raw: Dict[str, Any]) -> VmConfig:
     else:
         vlan_value = int(vlan_raw)
 
+    mac_address_raw = raw.get("mac_address")
+    if mac_address_raw is not None:
+        mac_address = str(mac_address_raw).strip()
+        if mac_address and mac_address.lower() not in {"none", "null"}:
+            # Proxmox expects MAC addresses in lowercase.
+            mac_address_value = mac_address.lower()
+        else:
+            mac_address_value = None
+    else:
+        mac_address_value = None
+
     return VmConfig(
         name=name,
         prox_node=prox_node,
@@ -160,6 +172,7 @@ def _parse_vm(raw: Dict[str, Any]) -> VmConfig:
         template_name=raw.get("template_name"),
         vm_type=raw.get("vm_type") or raw.get("os_type"),
         vlan=vlan_value,
+        mac_address=raw.get("mac_address"),
         disk_amount=disk_amount,
         disk_interface=str(raw.get("disk_interface", "scsi0")).strip() or "scsi0",
         storage_plan=storage_plan,
@@ -322,6 +335,7 @@ def _build_vm_resource(
             {
                 "bridge": "vmbr0",
                 **({"vlan_id": vm.vlan} if vm.vlan is not None else {}),
+                **({"mac_address": vm.mac_address} if vm.mac_address else {}),
             }
         ],
     }

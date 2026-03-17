@@ -1,0 +1,15 @@
+########################################################
+## /services/k8s-cluster/test/site.yml                ##
+########################################################
+#
+# Bootstrap and secure the test Kubernetes cluster.
+
+---
+- import_playbook: ../cluster-bootstrap.yml
+  vars:
+    k8s_cluster_name: ts-main-test
+    k8s_control_host_pattern: k8s-test-control-*
+    k8s_worker_host_pattern: k8s-test-worker-*
+    k8s_kube_control_endpoint: "{{ k8s_kube_test_control_endpoint }}"
+    k8s_pod_subnet: "{{ k8s_kube_test_pod_subnet }}"
+    k8s_service_subnet: "{{ k8s_kube_test_service_subnet }}"

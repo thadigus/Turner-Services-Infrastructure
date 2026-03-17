@@ -9,7 +9,8 @@
   ],
   "containerEnv": {
     "PULUMI_STACK": "ts-proxmox-test",
-    "TS_SERVER_LIST_PATH": "../../turner-services-sensitive-repo/server-list-test.yml"
+    "TS_SERVER_LIST_PATH": "/workspaces/Turner-Services-Infrastructure/turner-services-sensitive-repo/server-list-test.yml",
+    "KUBECONFIG": "/workspaces/Turner-Services-Infrastructure/turner-services-sensitive-repo/kubeconfigs/ts-main-test.conf"
   },
   "customizations": {
     "vscode": {

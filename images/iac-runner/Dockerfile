@@ -1,5 +1,5 @@
 FROM registry.access.redhat.com/ubi9/ubi:latest
-WORKDIR /workspace
+WORKDIR /workspaces
 COPY ./collections/requirements.yml /tmp/requirements.yml
 COPY ./requirements.txt /tmp/requirements.txt
 COPY ./deployment/pulumi-proxmox/requirements.txt /tmp/pulumi-proxmox-requirements.txt
@@ -19,12 +19,15 @@ RUN pip3 install -r /tmp/pulumi-proxmox-requirements.txt
 # Install Packer
 RUN dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
 RUN dnf -y install packer
-CMD ["/bin/bash"]
+
+# Install K8S Tools
+COPY .devcontainer/kubernetes.repo /etc/yum.repos.d/kubernetes.repo
+RUN dnf install -y kubectl
 
 # Create the turneradmin user as an administrator
 RUN groupadd turneradmin
 RUN useradd -s /bin/bash -m -g turneradmin turneradmin
-RUN chown turneradmin:turneradmin /workspace
+RUN chown turneradmin:turneradmin /workspaces
 RUN echo "turneradmin ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/turneradmin
 # Prepare home and ~/.ssh
 RUN mkdir -p /home/turneradmin/.ssh \
@@ -46,10 +49,10 @@ RUN mkdir -p /home/turneradmin/.ssh \
 USER turneradmin
 
 # Configure Git
-RUN git config --global --add safe.directory /workspace
+RUN git config --global --add safe.directory /workspaces
 
 # Install Pulumi
 RUN curl -fsSL https://get.pulumi.com | sh
 
 # Launch whatever shell we end up picking...
-CMD /bin/bash
+CMD ["/bin/bash"]
