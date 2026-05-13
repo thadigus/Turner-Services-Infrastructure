@@ -3,7 +3,7 @@ name: Run Packer Builds and Devcontainer
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 2 * * 1'  # Every Monday at 2 AM UTC → Sunday 10 PM ET
+    - cron: '30 4 * * 1'  # Every Monday at 4:30 AM UTC → Monday 12:30 AM ET
 
 jobs:
   setup-container-image:
