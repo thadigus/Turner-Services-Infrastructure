@@ -1,0 +1,87 @@
+---
+- name: Tear down Kubernetes cluster state on all nodes
+  hosts: "{{ k8s_control_host_pattern }}:{{ k8s_worker_host_pattern }}"
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../../turner-services-sensitive-repo/k8s-vars.yml
+  tasks:
+    - name: Reset kubeadm state
+      ansible.builtin.command:
+        cmd: kubeadm reset -f
+      register: k8s_reset
+      changed_when: k8s_reset.rc == 0
+      failed_when: false
+
+    - name: Remove Kubernetes and CNI state directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/kubernetes
+        - /etc/cni/net.d
+        - /var/lib/cni
+        - /var/lib/kubelet
+        - /var/lib/etcd
+        - /var/lib/calico
+
+    - name: Best-effort wipe of volatile /run/calico (cgroup files survive until reboot)
+      ansible.builtin.shell:
+        cmd: rm -rf /run/calico 2>/dev/null || true
+      changed_when: false
+
+    - name: Flush iptables rules left by kube-proxy and Calico
+      ansible.builtin.shell:
+        cmd: |
+          set -e
+          iptables -F
+          iptables -t nat -F
+          iptables -t mangle -F
+          iptables -X
+      changed_when: true
+
+    - name: Remove kube-vip VIP from local interfaces if still present
+      ansible.builtin.shell:
+        cmd: |
+          set -e
+          for iface in $(ip -o -4 addr show | awk '{print $2,$4}' | grep -E "{{ k8s_kube_vip_address | default('__NONE__') }}/32" | awk '{print $1}'); do
+            ip addr del {{ k8s_kube_vip_address }}/32 dev $iface || true
+          done
+      changed_when: true
+      when: k8s_kube_vip_address is defined
+
+    - name: Clear IPVS rules when ipvsadm is present
+      ansible.builtin.shell:
+        cmd: command -v ipvsadm >/dev/null 2>&1 && ipvsadm -C || true
+      changed_when: true
+
+    - name: Restart containerd to release CNI state (if installed)
+      ansible.builtin.systemd:
+        name: containerd
+        state: restarted
+      register: k8s_containerd_restart
+      failed_when:
+        - k8s_containerd_restart.failed | default(false)
+        - "'Could not find the requested service' not in (k8s_containerd_restart.msg | default(''))"
+
+    - name: Stop kubelet service (if installed)
+      ansible.builtin.systemd:
+        name: kubelet
+        state: stopped
+      register: k8s_kubelet_stop
+      failed_when:
+        - k8s_kubelet_stop.failed | default(false)
+        - "'Could not find the requested service' not in (k8s_kubelet_stop.msg | default(''))"
+
+- name: Remove local kubeconfig for cluster
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../turner-services-sensitive-repo/k8s-vars.yml
+  vars:
+    k8s_config_local_path: "../../turner-services-sensitive-repo/kubeconfigs"
+  tasks:
+    - name: Delete fetched kubeconfig for this cluster
+      ansible.builtin.file:
+        path: "{{ k8s_config_local_path }}/{{ k8s_cluster_name }}.conf"
+        state: absent

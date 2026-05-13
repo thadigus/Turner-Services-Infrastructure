@@ -1,0 +1,7 @@
+---
+- import_playbook: ../teardown.yml
+  vars:
+    k8s_cluster_name: ts-main-prod
+    k8s_control_host_pattern: k8s-control-*
+    k8s_worker_host_pattern: k8s-worker-*
+    k8s_kube_vip_address: "{{ k8s_kube_prod_vip_address }}"

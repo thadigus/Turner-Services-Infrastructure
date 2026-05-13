@@ -1,38 +1,32 @@
 # Services
 
-This directory contains playbooks that configure workload-specific systems after VM provisioning and base configuration.
+Playbooks that configure workload-specific systems after VM provisioning and base configuration.
 
 ## Layout
 
-- `github-runner-vm/`: GitHub Actions runner VM workload configuration.
-- `k8s-cluster/primary/`: Primary Kubernetes cluster workload configuration.
-- `k8s-cluster/test/`: Test Kubernetes cluster workload configuration for safe change validation.
+- `github-runner-vm/` — GitHub Actions runner VM workload configuration.
+- `k8s-cluster/production/` — production Kubernetes cluster bootstrap (3 hybrid control + 2 workers, HA via kube-vip).
+- `k8s-cluster/test/` — test Kubernetes cluster bootstrap (single control + worker).
+- `k8s-cluster/production-teardown/`, `k8s-cluster/test-teardown/` — destructive reset of the named cluster.
 
 ## Host Naming Patterns
 
-These playbooks target inventory hostnames by VM name patterns:
+Playbooks target inventory hostnames by VM-name glob:
 
 - GitHub Actions runner VMs: `gha-runner-*`
-- Primary Kubernetes control-plane nodes: `k8s-control-*`
-- Primary Kubernetes worker nodes: `k8s-worker-*`
-- Test Kubernetes control-plane nodes: `k8s-test-control-*`
-- Test Kubernetes worker nodes: `k8s-test-worker-*`
+- Production Kubernetes control-plane: `k8s-control-*`
+- Production Kubernetes workers: `k8s-worker-*`
+- Test Kubernetes control-plane: `k8s-test-control-*`
+- Test Kubernetes workers: `k8s-test-worker-*`
 
 ## Runner Script
 
-Use `services/run-service-playbook.sh` to run service playbooks locally and in CI.
-
-Examples:
-
 ```bash
-# Interactive menu (no args)
-services/run-service-playbook.sh
-
-# Non-interactive by service (CI-friendly)
+services/run-service-playbook.sh                                # interactive menu
+services/run-service-playbook.sh --list                         # list services
 services/run-service-playbook.sh --service github-runner-vm
-services/run-service-playbook.sh --service k8s-cluster/primary
+services/run-service-playbook.sh --service k8s-cluster/production
 services/run-service-playbook.sh --service k8s-cluster/test
-
-# List available service names
-services/run-service-playbook.sh --list
+services/run-service-playbook.sh --service k8s-cluster/production-teardown
+services/run-service-playbook.sh --service k8s-cluster/test-teardown
 ```
