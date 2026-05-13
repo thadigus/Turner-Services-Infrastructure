@@ -1,0 +1,6 @@
+---
+- import_playbook: ../teardown.yml
+  vars:
+    k8s_cluster_name: ts-main-test
+    k8s_control_host_pattern: k8s-test-control-*
+    k8s_worker_host_pattern: k8s-test-worker-*

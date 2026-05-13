@@ -1,9 +1,3 @@
-########################################################
-## /services/k8s-cluster/production/site.yml             ##
-########################################################
-#
-# Bootstrap and secure the production Kubernetes cluster.
-
 ---
 - import_playbook: ../cluster-bootstrap.yml
   vars:

@@ -1,9 +1,3 @@
-########################################################
-## /services/k8s-cluster/test/site.yml                ##
-########################################################
-#
-# Bootstrap and secure the test Kubernetes cluster.
-
 ---
 - import_playbook: ../cluster-bootstrap.yml
   vars:
