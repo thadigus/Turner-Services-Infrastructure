@@ -1,0 +1,22 @@
+name: Debug PAT
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --user root
+    steps:
+      - name: Probe secret shape (no value emitted)
+        env:
+          PAT: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
+        run: |
+          matches_format=$(printf '%s' "$PAT" | grep -Eq '^pst_[A-Za-z0-9_+/=-]+::[A-Za-z0-9_+/=-]+$' && echo yes || echo no)
+          has_whitespace=$(printf '%s' "$PAT" | grep -Eq '[[:space:]]' && echo yes || echo no)
+          has_control=$(printf '%s' "$PAT" | LC_ALL=C grep -Pq '[\x00-\x1f\x7f]' && echo yes || echo no)
+          echo "matches_format: $matches_format"
+          echo "has_whitespace: $has_whitespace"
+          echo "has_control: $has_control"
