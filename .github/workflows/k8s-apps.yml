@@ -1,4 +1,4 @@
-name: K8s Apps
+name: K8S Apps
 
 # Branch-driven IaC for the Helmfile catalog:
 #   push to non-main  -> apply to test
