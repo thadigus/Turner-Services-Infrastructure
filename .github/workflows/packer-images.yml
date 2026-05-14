@@ -44,7 +44,7 @@ jobs:
           scope: packer
       - name: Packer build (host-network sibling)
         run: |
-          host_work_root=$(docker inspect "$(hostname)" --format '{{range .Mounts}}{{if eq .Destination "/__w"}}{{.Source}}{{end}}{{end}}')
+          host_work_root=$(docker inspect "$(cat /etc/hostname)" --format '{{range .Mounts}}{{if eq .Destination "/__w"}}{{.Source}}{{end}}{{end}}')
           host_workspace="${host_work_root}${GITHUB_WORKSPACE#/__w}"
           host_temp="${host_work_root}${RUNNER_TEMP#/__w}"
           docker run --rm \
@@ -81,7 +81,7 @@ jobs:
           scope: packer
       - name: Packer build (host-network sibling)
         run: |
-          host_work_root=$(docker inspect "$(hostname)" --format '{{range .Mounts}}{{if eq .Destination "/__w"}}{{.Source}}{{end}}{{end}}')
+          host_work_root=$(docker inspect "$(cat /etc/hostname)" --format '{{range .Mounts}}{{if eq .Destination "/__w"}}{{.Source}}{{end}}{{end}}')
           host_workspace="${host_work_root}${GITHUB_WORKSPACE#/__w}"
           host_temp="${host_work_root}${RUNNER_TEMP#/__w}"
           docker run --rm \
@@ -118,7 +118,7 @@ jobs:
           scope: packer
       - name: Packer build (host-network sibling)
         run: |
-          host_work_root=$(docker inspect "$(hostname)" --format '{{range .Mounts}}{{if eq .Destination "/__w"}}{{.Source}}{{end}}{{end}}')
+          host_work_root=$(docker inspect "$(cat /etc/hostname)" --format '{{range .Mounts}}{{if eq .Destination "/__w"}}{{.Source}}{{end}}{{end}}')
           host_workspace="${host_work_root}${GITHUB_WORKSPACE#/__w}"
           host_temp="${host_work_root}${RUNNER_TEMP#/__w}"
           docker run --rm \
@@ -155,7 +155,7 @@ jobs:
           scope: packer
       - name: Packer build (host-network sibling)
         run: |
-          host_work_root=$(docker inspect "$(hostname)" --format '{{range .Mounts}}{{if eq .Destination "/__w"}}{{.Source}}{{end}}{{end}}')
+          host_work_root=$(docker inspect "$(cat /etc/hostname)" --format '{{range .Mounts}}{{if eq .Destination "/__w"}}{{.Source}}{{end}}{{end}}')
           host_workspace="${host_work_root}${GITHUB_WORKSPACE#/__w}"
           host_temp="${host_work_root}${RUNNER_TEMP#/__w}"
           docker run --rm \
