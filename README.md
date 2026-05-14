@@ -22,7 +22,8 @@ Home-lab IaC for a Proxmox-backed environment. Everything that runs is described
 | Base OS config | Ansible (`deployment/base-config-pulumi.yml`) | Daily cron + manual |
 | Workload bootstrap (K8s cluster, runners) | Ansible (`services/<name>/site.yml`) | Manual via `services/run-service-playbook.sh` |
 | K8s app deploys | Helmfile (`services/k8s-apps/`) | Push to non-`main` → test; push to `main` → prod; daily cron → prod |
-| Container images | Packer + Docker build | Weekly cron + manual |
+| Container images (devcontainer, in-cluster-dev) | Docker build | Sunday 22:00 UTC + manual |
+| Packer VM images (Ubuntu, RHEL, Windows, Kali) | Packer | Monday 04:30 UTC + manual |
 
 ## Role file structure
 

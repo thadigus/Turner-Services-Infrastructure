@@ -1,0 +1,53 @@
+name: Container Images
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 22 * * 0'  # Sundays at 22:00 UTC — runs ~6h before packer-images
+
+jobs:
+  devcontainer:
+    name: Build DevContainer Image
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.ACCESS_TOKEN }}
+          submodules: recursive
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: images/iac-runner/Dockerfile
+          push: true
+          tags: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+
+  in-cluster-dev:
+    name: Build In-Cluster Dev Image
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.ACCESS_TOKEN }}
+          submodules: recursive
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: images/in-cluster-dev/Dockerfile
+          push: true
+          tags: ghcr.io/thadigus/turner-services-infrastructure:in-cluster-dev
