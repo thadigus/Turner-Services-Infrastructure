@@ -117,17 +117,19 @@ NS
 }
 
 run_helmfile() {
-  local op="$1"
   local args=(-e "${ENV_NAME}" -f "${K8S_APPS_DIR}/helmfile.yaml")
   [[ -n "${LAYER}" ]] && args+=(-l "layer=${LAYER}")
-  echo "==> helmfile ${args[*]} ${op}"
-  helmfile "${args[@]}" "${op}"
+  echo "==> helmfile ${args[*]} $*"
+  helmfile "${args[@]}" "$@"
 }
 
 case "${SUBCMD}" in
   bootstrap) bootstrap ;;
   diff)      run_helmfile diff ;;
-  apply)     run_helmfile apply ;;
+  # --skip-diff-on-install lets apply work on a fresh cluster where some
+  # releases reference CRDs that don't exist yet (cluster-issuer-le before
+  # cert-manager has installed the CRDs in the same run).
+  apply)     run_helmfile apply --skip-diff-on-install ;;
   sync)      run_helmfile sync ;;
   destroy)   run_helmfile destroy ;;
 esac
