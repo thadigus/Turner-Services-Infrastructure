@@ -38,7 +38,9 @@ jobs:
     runs-on: self-hosted
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
-      options: --user root
+      # --dns 10.0.3.1 routes internal hostnames (turnerservices.cloud) to
+      # UniFi DNS; 1.1.1.1 fallback covers public lookups (helm repos, ghcr).
+      options: --user root --dns 10.0.3.1 --dns 1.1.1.1
     permissions:
       contents: read
     steps:
