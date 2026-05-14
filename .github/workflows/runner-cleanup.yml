@@ -1,0 +1,14 @@
+name: Runner Cleanup
+
+on:
+  workflow_dispatch:
+
+jobs:
+  reclaim-workspace-ownership:
+    runs-on: self-hosted
+    container:
+      image: alpine:3.20
+      options: --user root
+    steps:
+      - name: chown workspace back to runner user
+        run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
