@@ -38,9 +38,7 @@ jobs:
     runs-on: self-hosted
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
-      # --dns 10.0.3.1 routes internal hostnames (turnerservices.cloud) to
-      # UniFi DNS; 1.1.1.1 fallback covers public lookups (helm repos, ghcr).
-      options: --user root --dns 10.0.3.1 --dns 1.1.1.1
+      options: --user root
     permissions:
       contents: read
     steps:
@@ -48,6 +46,16 @@ jobs:
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
+
+      # Docker's embedded DNS (127.0.0.11) doesn't know turnerservices.cloud
+      # and overrides --dns when the runner attaches a user network. Hard-pin
+      # cluster endpoints in /etc/hosts instead.
+      - name: Pin internal cluster endpoints in /etc/hosts
+        run: |
+          {
+            echo "10.0.3.5  k8s-control-prod.turnerservices.cloud"
+            echo "10.0.3.118 k8s-test-control-01.turnerservices.cloud"
+          } >> /etc/hosts
 
       - name: Resolve target env
         id: env
