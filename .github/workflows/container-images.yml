@@ -3,16 +3,26 @@ name: Container Images
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 22 * * 0'  # Sundays at 22:00 UTC — runs ~6h before packer-images
+    - cron: '0 22 * * 0'
 
 jobs:
   devcontainer:
     name: Build DevContainer Image
     runs-on: self-hosted
+    container:
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --user root -v /var/run/docker.sock:/var/run/docker.sock
     permissions:
       contents: read
       packages: write
     steps:
+      - name: Ensure docker CLI + buildx (bootstrap)
+        run: |
+          if ! command -v docker >/dev/null; then
+            dnf install -y dnf-plugins-core
+            dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+            dnf install -y docker-ce-cli docker-buildx-plugin
+          fi
       - uses: actions/checkout@v6
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
@@ -28,14 +38,27 @@ jobs:
           file: images/iac-runner/Dockerfile
           push: true
           tags: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      - name: Restore workspace ownership
+        if: always()
+        run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
 
   in-cluster-dev:
     name: Build In-Cluster Dev Image
     runs-on: self-hosted
+    container:
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --user root -v /var/run/docker.sock:/var/run/docker.sock
     permissions:
       contents: read
       packages: write
     steps:
+      - name: Ensure docker CLI + buildx (bootstrap)
+        run: |
+          if ! command -v docker >/dev/null; then
+            dnf install -y dnf-plugins-core
+            dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+            dnf install -y docker-ce-cli docker-buildx-plugin
+          fi
       - uses: actions/checkout@v6
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
@@ -51,3 +74,6 @@ jobs:
           file: images/in-cluster-dev/Dockerfile
           push: true
           tags: ghcr.io/thadigus/turner-services-infrastructure:in-cluster-dev
+      - name: Restore workspace ownership
+        if: always()
+        run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true

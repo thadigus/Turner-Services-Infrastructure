@@ -1,12 +1,9 @@
 name: Packer Images
 
-# ISO download + Packer template builds. Depends on the devcontainer image
-# (built by container-images.yml the day before) but does not re-build it.
-
 on:
   workflow_dispatch:
   schedule:
-    - cron: '30 4 * * 1'  # Mondays at 04:30 UTC
+    - cron: '30 4 * * 1'
 
 jobs:
   download-isos:
@@ -33,6 +30,9 @@ jobs:
     name: Ubuntu Packer Build
     runs-on: self-hosted
     needs: download-isos
+    container:
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --user root --network host
     steps:
       - uses: actions/checkout@v6
         with:
@@ -42,25 +42,18 @@ jobs:
         with:
           proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
           scope: packer
-      - run: |
-          docker run --rm \
-            --network host \
-            --user root \
-            -v "$PWD":/workspace \
-            -v "$RUNNER_TEMP":"$RUNNER_TEMP" \
-            -e TS_PROXMOX_PACKER_USER \
-            -e TS_PROXMOX_PACKER_APIKEY \
-            -e TS_PROXMOX_TOKEN_SECRET \
-            -e TS_WIN_TURNERANS_SVC_PASSWD \
-            -e TS_TURNERANS_SVC_SSH_PRIVKEY \
-            -w /workspace \
-            ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-            bash images/build-scripts/ubuntu-packer-build-rack.sh
+      - run: bash images/build-scripts/ubuntu-packer-build-rack.sh
+      - name: Restore workspace ownership
+        if: always()
+        run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
 
   rhel-packer-build:
     name: RHEL Packer Build
     runs-on: self-hosted
     needs: download-isos
+    container:
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --user root --network host
     steps:
       - uses: actions/checkout@v6
         with:
@@ -70,25 +63,18 @@ jobs:
         with:
           proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
           scope: packer
-      - run: |
-          docker run --rm \
-            --network host \
-            --user root \
-            -v "$PWD":/workspace \
-            -v "$RUNNER_TEMP":"$RUNNER_TEMP" \
-            -e TS_PROXMOX_PACKER_USER \
-            -e TS_PROXMOX_PACKER_APIKEY \
-            -e TS_PROXMOX_TOKEN_SECRET \
-            -e TS_WIN_TURNERANS_SVC_PASSWD \
-            -e TS_TURNERANS_SVC_SSH_PRIVKEY \
-            -w /workspace \
-            ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-            bash images/build-scripts/rhel-packer-build-rack.sh
+      - run: bash images/build-scripts/rhel-packer-build-rack.sh
+      - name: Restore workspace ownership
+        if: always()
+        run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
 
   windows-packer-build:
     name: Windows Packer Build
     runs-on: self-hosted
     needs: download-isos
+    container:
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --user root --network host
     steps:
       - uses: actions/checkout@v6
         with:
@@ -98,25 +84,18 @@ jobs:
         with:
           proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
           scope: packer
-      - run: |
-          docker run --rm \
-            --network host \
-            --user root \
-            -v "$PWD":/workspace \
-            -v "$RUNNER_TEMP":"$RUNNER_TEMP" \
-            -e TS_PROXMOX_PACKER_USER \
-            -e TS_PROXMOX_PACKER_APIKEY \
-            -e TS_PROXMOX_TOKEN_SECRET \
-            -e TS_WIN_TURNERANS_SVC_PASSWD \
-            -e TS_TURNERANS_SVC_SSH_PRIVKEY \
-            -w /workspace \
-            ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-            bash images/build-scripts/windows-packer-build-rack.sh
+      - run: bash images/build-scripts/windows-packer-build-rack.sh
+      - name: Restore workspace ownership
+        if: always()
+        run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
 
   kali-packer-build:
     name: Kali Packer Build
     runs-on: self-hosted
     needs: download-isos
+    container:
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --user root --network host
     steps:
       - uses: actions/checkout@v6
         with:
@@ -126,17 +105,7 @@ jobs:
         with:
           proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
           scope: packer
-      - run: |
-          docker run --rm \
-            --network host \
-            --user root \
-            -v "$PWD":/workspace \
-            -v "$RUNNER_TEMP":"$RUNNER_TEMP" \
-            -e TS_PROXMOX_PACKER_USER \
-            -e TS_PROXMOX_PACKER_APIKEY \
-            -e TS_PROXMOX_TOKEN_SECRET \
-            -e TS_WIN_TURNERANS_SVC_PASSWD \
-            -e TS_TURNERANS_SVC_SSH_PRIVKEY \
-            -w /workspace \
-            ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-            bash images/build-scripts/kali-packer-build-rack.sh
+      - run: bash images/build-scripts/kali-packer-build-rack.sh
+      - name: Restore workspace ownership
+        if: always()
+        run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true

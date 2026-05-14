@@ -20,6 +20,10 @@ RUN pip3 install -r /tmp/pulumi-proxmox-requirements.txt
 RUN dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
 RUN dnf -y install packer
 
+# Install Docker CLI + buildx (talks to host daemon via mounted socket)
+RUN dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+RUN dnf install -y docker-ce-cli docker-buildx-plugin
+
 # Install K8S Tools
 COPY .devcontainer/kubernetes.repo /etc/yum.repos.d/kubernetes.repo
 RUN dnf install -y kubectl
