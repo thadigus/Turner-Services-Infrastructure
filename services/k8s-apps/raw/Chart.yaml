@@ -1,0 +1,6 @@
+apiVersion: v2
+name: raw
+description: Renders .Values.resources as plain Kubernetes manifests
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

@@ -1,32 +1,45 @@
 # Services
 
-Playbooks that configure workload-specific systems after VM provisioning and base configuration.
+Per-workload IaC. Two flavours live here:
+
+1. **Ansible playbooks** (`*/site.yml`) for one-time-ish workload bootstrap (K8s cluster, GitHub runner VMs). Dispatched by `run-service-playbook.sh`.
+2. **Helmfile catalog** (`k8s-apps/`) for ongoing K8s deployments. Dispatched by `../scripts/run-k8s-app.sh`. See [k8s-apps/README.md](k8s-apps/README.md).
 
 ## Layout
 
-- `github-runner-vm/` — GitHub Actions runner VM workload configuration.
-- `k8s-cluster/production/` — production Kubernetes cluster bootstrap (3 hybrid control + 2 workers, HA via kube-vip).
-- `k8s-cluster/test/` — test Kubernetes cluster bootstrap (single control + worker).
-- `k8s-cluster/production-teardown/`, `k8s-cluster/test-teardown/` — destructive reset of the named cluster.
+- `github-runner-vm/` — GitHub Actions runner VM configuration.
+- `k8s-cluster/production/` — production K8s cluster (3 hybrid control + 2 workers, HA via kube-vip 10.0.3.5).
+- `k8s-cluster/test/` — test K8s cluster (1 control + 1 worker, kube-vip 10.0.3.10).
+- `k8s-cluster/{production,test}-teardown/` — destructive reset.
+- `k8s-cluster/cluster-bootstrap.yml` — shared playbook imported by the per-cluster `site.yml` files.
+- `k8s-apps/` — Helmfile catalog of cluster workloads (ingress-nginx, cert-manager, code-server, …). Reconciled daily by CI.
 
-## Host Naming Patterns
+## Host naming
 
-Playbooks target inventory hostnames by VM-name glob:
+| Workload | Hostname pattern |
+| --- | --- |
+| GitHub runners | `gha-runner-*` |
+| Prod K8s control | `k8s-control-*` |
+| Prod K8s workers | `k8s-worker-*` |
+| Test K8s control | `k8s-test-control-*` |
+| Test K8s workers | `k8s-test-worker-*` |
 
-- GitHub Actions runner VMs: `gha-runner-*`
-- Production Kubernetes control-plane: `k8s-control-*`
-- Production Kubernetes workers: `k8s-worker-*`
-- Test Kubernetes control-plane: `k8s-test-control-*`
-- Test Kubernetes workers: `k8s-test-worker-*`
-
-## Runner Script
+## Ansible dispatcher
 
 ```bash
 services/run-service-playbook.sh                                # interactive menu
-services/run-service-playbook.sh --list                         # list services
+services/run-service-playbook.sh --list
 services/run-service-playbook.sh --service github-runner-vm
-services/run-service-playbook.sh --service k8s-cluster/production
 services/run-service-playbook.sh --service k8s-cluster/test
-services/run-service-playbook.sh --service k8s-cluster/production-teardown
+services/run-service-playbook.sh --service k8s-cluster/production
 services/run-service-playbook.sh --service k8s-cluster/test-teardown
+```
+
+## Helmfile dispatcher
+
+```bash
+scripts/run-k8s-app.sh bootstrap --env test         # one-time per cluster
+scripts/run-k8s-app.sh apply     --env test
+scripts/run-k8s-app.sh diff      --env prod
+scripts/run-k8s-app.sh apply     --env prod --layer apps
 ```

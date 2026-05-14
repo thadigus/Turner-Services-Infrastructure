@@ -1,0 +1,9 @@
+resources:
+  # Name must match the chart's KUBEVIP_CONFIG_MAP env default.
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: kube-vip-cloud-provider
+      namespace: kube-system
+    data:
+      range-global: {{ .Values.lbIpRange | quote }}

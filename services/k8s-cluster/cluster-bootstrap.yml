@@ -75,6 +75,15 @@
         - "10256"
         - "30000:32767"
 
+    - name: Allow ingress (HTTP/HTTPS) from anywhere via UFW
+      community.general.ufw:
+        rule: allow
+        proto: tcp
+        port: "{{ item }}"
+      loop:
+        - "80"
+        - "443"
+
     - name: Resolve control plane endpoint to VIP in /etc/hosts
       ansible.builtin.lineinfile:
         path: /etc/hosts

@@ -1,0 +1,23 @@
+clusterName: ts-main-prod
+kubeContext: ts-main-prod
+baseDomain: turnerservices.cloud
+lbIpRange: "10.0.3.40-10.0.3.79"
+letsencryptEmail: tturner@weigandconstruction.com
+dnsZone: turnerservices.cloud
+
+cloudflareApiTokenSecret:
+  name: cloudflare-api-token
+  namespace: platform
+  key: api-token
+
+codeServer:
+  host: code.turnerservices.cloud
+  pvcSize: 100Gi
+  storageClass: local-path
+  image:
+    repository: ghcr.io/thadigus/turner-services-infrastructure
+    tag: in-cluster-dev
+  passwordSecret:
+    name: code-server-password
+    namespace: apps
+    key: password
