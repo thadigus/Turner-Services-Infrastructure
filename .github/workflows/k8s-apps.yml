@@ -67,12 +67,12 @@ jobs:
       - name: bootstrap
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.bootstrap }}
         env:
-          KUBECONFIG: turner-services-sensitive-repo/kubeconfigs/ts-main-${{ steps.env.outputs.name }}.conf
+          KUBECONFIG: ${{ github.workspace }}/turner-services-sensitive-repo/kubeconfigs/ts-main-${{ steps.env.outputs.name }}.conf
         run: scripts/run-k8s-app.sh bootstrap --env ${{ steps.env.outputs.name }}
 
       - name: helmfile apply
         env:
-          KUBECONFIG: turner-services-sensitive-repo/kubeconfigs/ts-main-${{ steps.env.outputs.name }}.conf
+          KUBECONFIG: ${{ github.workspace }}/turner-services-sensitive-repo/kubeconfigs/ts-main-${{ steps.env.outputs.name }}.conf
         run: scripts/run-k8s-app.sh apply --env ${{ steps.env.outputs.name }}
 
       # Container ran as root and wrote to the bind-mounted workspace. Hand
