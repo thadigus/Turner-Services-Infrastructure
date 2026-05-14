@@ -24,6 +24,14 @@ RUN dnf -y install packer
 COPY .devcontainer/kubernetes.repo /etc/yum.repos.d/kubernetes.repo
 RUN dnf install -y kubectl
 
+# Proton Pass CLI. Container can't reach the kernel keyring, so use the fs provider.
+RUN dnf install -y jq
+ENV PROTON_PASS_KEY_PROVIDER=fs
+RUN curl -fsSL https://proton.me/download/pass-cli/install.sh | PROTON_PASS_CLI_INSTALL_DIR=/usr/local/bin bash \
+    && pass-cli --version
+COPY images/iac-runner/profile.d/ts-secrets-check.sh /etc/profile.d/ts-secrets-check.sh
+RUN chmod 0644 /etc/profile.d/ts-secrets-check.sh
+
 # Install Helm + Helmfile + helm-diff plugin (system-wide so root and turneradmin both see it).
 ARG HELMFILE_VERSION=0.171.0
 ENV HELM_PLUGINS=/usr/local/share/helm/plugins

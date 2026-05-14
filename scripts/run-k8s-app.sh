@@ -4,7 +4,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 K8S_APPS_DIR="${REPO_ROOT}/services/k8s-apps"
-SENSITIVE_DIR="${REPO_ROOT}/turner-services-sensitive-repo"
+
+if [[ -z "${TS_KUBECONFIG_DIR:-}" ]]; then
+  if [[ -f "${REPO_ROOT}/.secrets/env.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "${REPO_ROOT}/.secrets/env.sh"
+  else
+    echo "Error: TS_* env vars unset and ${REPO_ROOT}/.secrets/env.sh missing." >&2
+    echo "Run scripts/bootstrap-secrets.sh (after pass-cli login)." >&2
+    exit 1
+  fi
+fi
 
 LOCAL_PATH_PROVISIONER_VERSION="${LOCAL_PATH_PROVISIONER_VERSION:-v0.0.30}"
 LOCAL_PATH_PROVISIONER_URL="https://raw.githubusercontent.com/rancher/local-path-provisioner/${LOCAL_PATH_PROVISIONER_VERSION}/deploy/local-path-storage.yaml"
@@ -57,8 +67,8 @@ case "${ENV_NAME}" in test|prod) ;; *) die "--env must be 'test' or 'prod'";; es
 
 CONTEXT="ts-main-${ENV_NAME}"
 
-if [[ -z "${KUBECONFIG:-}" ]]; then
-  export KUBECONFIG="${SENSITIVE_DIR}/kubeconfigs/${CONTEXT}.conf"
+if [[ -z "${KUBECONFIG:-}" ]] || [[ "${KUBECONFIG}" != *"${CONTEXT}.conf"* ]]; then
+  export KUBECONFIG="${TS_KUBECONFIG_DIR}/${CONTEXT}.conf"
 fi
 [[ -f "${KUBECONFIG%%:*}" ]] || die "kubeconfig not found at ${KUBECONFIG%%:*}"
 
@@ -90,8 +100,8 @@ NS
     -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}' \
     || true
 
-  local cf_token_file="${SENSITIVE_DIR}/cloudflare-dns01-token.txt"
-  local cs_password_file="${SENSITIVE_DIR}/code-server-password.txt"
+  local cf_token_file="${TS_CF_DNS01_TOKEN_FILE}"
+  local cs_password_file="${TS_CODE_SERVER_PASSWORD_FILE}"
 
   if [[ -f "${cf_token_file}" ]]; then
     if grep -q REPLACE_WITH_CLOUDFLARE_API_TOKEN "${cf_token_file}"; then

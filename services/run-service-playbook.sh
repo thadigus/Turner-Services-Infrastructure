@@ -5,6 +5,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 DEFAULT_INVENTORY="${REPO_ROOT}/turner-services-sensitive-repo/inventories/ansible-inv-rack.proxmox.yml"
 
+if [[ -z "${TS_TURNERANS_SVC_SSH_PRIVKEY:-}" ]]; then
+  if [[ -f "${REPO_ROOT}/.secrets/env.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "${REPO_ROOT}/.secrets/env.sh"
+  else
+    echo "Error: TS_* env vars unset and ${REPO_ROOT}/.secrets/env.sh missing." >&2
+    echo "Run scripts/bootstrap-secrets.sh (after pass-cli login)." >&2
+    exit 1
+  fi
+fi
+
 usage() {
   cat <<USAGE
 Usage: services/run-service-playbook.sh [options] [-- <ansible-playbook args>]
@@ -141,6 +152,10 @@ if ! command -v ansible-playbook >/dev/null 2>&1; then
 fi
 
 CMD=(ansible-playbook -i "${INVENTORY}" "${PLAYBOOK_PATH}")
+CMD+=(--private-key "${TS_TURNERANS_SVC_SSH_PRIVKEY}")
+CMD+=(--extra-vars "win_turneradmin_passwd=${TS_WIN_TURNERADMIN_PASSWD}")
+CMD+=(--extra-vars "win_turnerans_svc_passwd=${TS_WIN_TURNERANS_SVC_PASSWD}")
+CMD+=(--extra-vars "unifi_api_key=${TS_UNIFI_API_KEY}")
 if (( CHECK_ONLY == 1 )); then
   CMD+=(--syntax-check)
 fi

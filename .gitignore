@@ -2,3 +2,9 @@
 rpi-pxeboot/scripts/.work/
 --*
 **/__pycache__/
+
+.secrets/
+
+**/*_id_rsa
+**/*_id_ed25519
+**/*_id_ecdsa

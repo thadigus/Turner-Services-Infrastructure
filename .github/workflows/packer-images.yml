@@ -20,7 +20,11 @@ jobs:
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
-      - run: ansible-playbook images/download-isos.yml
+      - uses: ./.github/actions/materialize-secrets
+        with:
+          proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
+          scope: packer
+      - run: ansible-playbook --private-key "$TS_TURNERANS_SVC_SSH_PRIVKEY" images/download-isos.yml
       - name: Restore workspace ownership
         if: always()
         run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
@@ -34,11 +38,21 @@ jobs:
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
+      - uses: ./.github/actions/materialize-secrets
+        with:
+          proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
+          scope: packer
       - run: |
           docker run --rm \
             --network host \
             --user root \
             -v "$PWD":/workspace \
+            -v "$RUNNER_TEMP":"$RUNNER_TEMP" \
+            -e TS_PROXMOX_PACKER_USER \
+            -e TS_PROXMOX_PACKER_APIKEY \
+            -e TS_PROXMOX_TOKEN_SECRET \
+            -e TS_WIN_TURNERANS_SVC_PASSWD \
+            -e TS_TURNERANS_SVC_SSH_PRIVKEY \
             -w /workspace \
             ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
             bash images/build-scripts/ubuntu-packer-build-rack.sh
@@ -52,11 +66,21 @@ jobs:
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
+      - uses: ./.github/actions/materialize-secrets
+        with:
+          proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
+          scope: packer
       - run: |
           docker run --rm \
             --network host \
             --user root \
             -v "$PWD":/workspace \
+            -v "$RUNNER_TEMP":"$RUNNER_TEMP" \
+            -e TS_PROXMOX_PACKER_USER \
+            -e TS_PROXMOX_PACKER_APIKEY \
+            -e TS_PROXMOX_TOKEN_SECRET \
+            -e TS_WIN_TURNERANS_SVC_PASSWD \
+            -e TS_TURNERANS_SVC_SSH_PRIVKEY \
             -w /workspace \
             ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
             bash images/build-scripts/rhel-packer-build-rack.sh
@@ -70,11 +94,21 @@ jobs:
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
+      - uses: ./.github/actions/materialize-secrets
+        with:
+          proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
+          scope: packer
       - run: |
           docker run --rm \
             --network host \
             --user root \
             -v "$PWD":/workspace \
+            -v "$RUNNER_TEMP":"$RUNNER_TEMP" \
+            -e TS_PROXMOX_PACKER_USER \
+            -e TS_PROXMOX_PACKER_APIKEY \
+            -e TS_PROXMOX_TOKEN_SECRET \
+            -e TS_WIN_TURNERANS_SVC_PASSWD \
+            -e TS_TURNERANS_SVC_SSH_PRIVKEY \
             -w /workspace \
             ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
             bash images/build-scripts/windows-packer-build-rack.sh
@@ -88,11 +122,21 @@ jobs:
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
+      - uses: ./.github/actions/materialize-secrets
+        with:
+          proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
+          scope: packer
       - run: |
           docker run --rm \
             --network host \
             --user root \
             -v "$PWD":/workspace \
+            -v "$RUNNER_TEMP":"$RUNNER_TEMP" \
+            -e TS_PROXMOX_PACKER_USER \
+            -e TS_PROXMOX_PACKER_APIKEY \
+            -e TS_PROXMOX_TOKEN_SECRET \
+            -e TS_WIN_TURNERANS_SVC_PASSWD \
+            -e TS_TURNERANS_SVC_SSH_PRIVKEY \
             -w /workspace \
             ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
             bash images/build-scripts/kali-packer-build-rack.sh

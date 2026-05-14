@@ -74,15 +74,18 @@ jobs:
           echo "name=$name" >> "$GITHUB_OUTPUT"
           echo "Targeting ts-main-$name"
 
+      - name: Materialize secrets from Proton Pass
+        uses: ./.github/actions/materialize-secrets
+        with:
+          proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
+          scope: k8s-apps
+          kubeconfig-env: ${{ steps.env.outputs.name }}
+
       - name: bootstrap
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.bootstrap }}
-        env:
-          KUBECONFIG: ${{ github.workspace }}/turner-services-sensitive-repo/kubeconfigs/ts-main-${{ steps.env.outputs.name }}.conf
         run: scripts/run-k8s-app.sh bootstrap --env ${{ steps.env.outputs.name }}
 
       - name: helmfile apply
-        env:
-          KUBECONFIG: ${{ github.workspace }}/turner-services-sensitive-repo/kubeconfigs/ts-main-${{ steps.env.outputs.name }}.conf
         run: scripts/run-k8s-app.sh apply --env ${{ steps.env.outputs.name }}
 
       # Container ran as root and wrote to the bind-mounted workspace. Hand

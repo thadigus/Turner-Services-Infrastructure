@@ -9,9 +9,11 @@
   ],
   "containerEnv": {
     "PULUMI_STACK": "ts-proxmox-test",
-    "TS_SERVER_LIST_PATH": "/workspaces/Turner-Services-Infrastructure/turner-services-sensitive-repo/server-list-test.yml",
-    "KUBECONFIG": "/workspaces/Turner-Services-Infrastructure/turner-services-sensitive-repo/kubeconfigs/ts-main-test.conf:/workspaces/Turner-Services-Infrastructure/turner-services-sensitive-repo/kubeconfigs/ts-main-prod.conf"
+    "TS_SERVER_LIST_PATH": "/workspaces/Turner-Services-Infrastructure/turner-services-sensitive-repo/server-list-test.yml"
   },
+  "mounts": [
+    "source=ts-proton-pass-cli,target=/home/turneradmin/.local/share/proton-pass-cli,type=volume"
+  ],
   "customizations": {
     "vscode": {
       "settings": {
@@ -20,5 +22,6 @@
     }
   },
   "remoteUser": "turneradmin",
-  "updateRemoteUserUID": true
+  "updateRemoteUserUID": true,
+  "postStartCommand": "sudo chown -R turneradmin:turneradmin /home/turneradmin/" 
 }

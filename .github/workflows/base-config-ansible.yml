@@ -21,11 +21,25 @@ jobs:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
 
+      - name: Materialize secrets from Proton Pass
+        uses: ./.github/actions/materialize-secrets
+        with:
+          proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
+          scope: ansible
+
       - name: Run base config playbook
         env:
           ANSIBLE_CONFIG: ansible.cfg
           ANSIBLE_ROLES_PATH: roles
-        run: ansible-playbook -i turner-services-sensitive-repo/inventories/ansible-inv-rack.proxmox.yml deployment/base-config-pulumi.yml --limit 'tag_pulumi:&tag_production'
+        run: |
+          ansible-playbook \
+            -i turner-services-sensitive-repo/inventories/ansible-inv-rack.proxmox.yml \
+            --private-key "$TS_TURNERANS_SVC_SSH_PRIVKEY" \
+            --extra-vars "win_turneradmin_passwd=$TS_WIN_TURNERADMIN_PASSWD" \
+            --extra-vars "win_turnerans_svc_passwd=$TS_WIN_TURNERANS_SVC_PASSWD" \
+            --extra-vars "unifi_api_key=$TS_UNIFI_API_KEY" \
+            deployment/base-config-pulumi.yml \
+            --limit 'tag_pulumi:&tag_production'
 
       - name: Restore workspace ownership
         if: always()

@@ -1,0 +1,106 @@
+name: Materialize Secrets
+description: Fetch secrets live from Proton Pass and export TS_* env vars / file paths matching the local .secrets/env.sh contract.
+
+inputs:
+  proton-pass-token:
+    description: Proton Pass personal access token (pst_xxx::TOKENKEY).
+    required: true
+  vault:
+    description: Proton Pass vault name holding the ts-* items.
+    required: false
+    default: Turner-Services-Infra
+  scope:
+    description: Which subset of secrets to materialize (ansible | k8s-apps | packer | all).
+    required: false
+    default: all
+  kubeconfig-env:
+    description: For scope=k8s-apps, which kubeconfig to write (test | prod).
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Verify pass-cli is available
+      shell: bash
+      run: command -v pass-cli >/dev/null || { echo "pass-cli not installed in this image"; exit 1; }
+
+    - name: Login to Proton Pass
+      shell: bash
+      env:
+        PROTON_PASS_PERSONAL_ACCESS_TOKEN: ${{ inputs.proton-pass-token }}
+        PROTON_PASS_KEY_PROVIDER: fs
+        PROTON_PASS_SESSION_DIR: ${{ runner.temp }}/pass-session
+      run: |
+        set -euo pipefail
+        mkdir -p "$PROTON_PASS_SESSION_DIR"
+        pass-cli login >/dev/null
+        echo "PROTON_PASS_KEY_PROVIDER=fs" >> "$GITHUB_ENV"
+        echo "PROTON_PASS_SESSION_DIR=$PROTON_PASS_SESSION_DIR" >> "$GITHUB_ENV"
+
+    - name: Fetch secrets
+      shell: bash
+      env:
+        VAULT: ${{ inputs.vault }}
+        SCOPE: ${{ inputs.scope }}
+        KUBE_ENV: ${{ inputs.kubeconfig-env }}
+      run: |
+        set -euo pipefail
+        umask 077
+
+        fetch() {
+          pass-cli item view --vault-name "$VAULT" --item-title "$1" --field "$2"
+        }
+        mask() { echo "::add-mask::$1"; }
+        gha_secret_env() { mask "$2"; printf '%s<<__EOF__\n%s\n__EOF__\n' "$1" "$2" >> "$GITHUB_ENV"; }
+
+        want_ansible=0; want_k8s=0; want_packer=0
+        case "$SCOPE" in
+          ansible)  want_ansible=1 ;;
+          k8s-apps) want_k8s=1 ;;
+          packer)   want_packer=1 ;;
+          all)      want_ansible=1; want_k8s=1; want_packer=1 ;;
+          *) echo "Unknown scope: $SCOPE" >&2; exit 1 ;;
+        esac
+
+        if [ "$want_ansible" = 1 ] || [ "$want_packer" = 1 ]; then
+          mkdir -p "$RUNNER_TEMP/ssh"
+          fetch ts-turnerans_svc-ssh-privkey note > "$RUNNER_TEMP/ssh/turnerans_svc_id_rsa"
+          chmod 600 "$RUNNER_TEMP/ssh/turnerans_svc_id_rsa"
+          echo "TS_TURNERANS_SVC_SSH_PRIVKEY=$RUNNER_TEMP/ssh/turnerans_svc_id_rsa" >> "$GITHUB_ENV"
+
+          gha_secret_env TS_PROXMOX_TOKEN_SECRET "$(fetch ts-proxmox-packer-apitoken password)"
+        fi
+
+        if [ "$want_ansible" = 1 ]; then
+          gha_secret_env TS_WIN_TURNERADMIN_PASSWD   "$(fetch ts-windows-turneradmin password)"
+          gha_secret_env TS_WIN_TURNERANS_SVC_PASSWD "$(fetch ts-windows-turnerans_svc password)"
+          gha_secret_env TS_UNIFI_API_KEY            "$(fetch ts-unifi-fwmaster-apikey password)"
+        fi
+
+        if [ "$want_packer" = 1 ]; then
+          gha_secret_env TS_PROXMOX_PACKER_USER   "$(fetch ts-proxmox-packer-apitoken username)"
+          gha_secret_env TS_PROXMOX_PACKER_APIKEY "$(fetch ts-proxmox-packer-apitoken password)"
+          gha_secret_env TS_WIN_TURNERANS_SVC_PASSWD "$(fetch ts-windows-turnerans_svc password)"
+        fi
+
+        if [ "$want_k8s" = 1 ]; then
+          [ -n "$KUBE_ENV" ] || { echo "scope=k8s-apps requires kubeconfig-env (test|prod)"; exit 1; }
+          case "$KUBE_ENV" in test|prod) ;; *) echo "kubeconfig-env must be test or prod"; exit 1 ;; esac
+
+          mkdir -p "$RUNNER_TEMP/kubeconfigs"
+          fetch "ts-main-${KUBE_ENV}-kubeconfig" note > "$RUNNER_TEMP/kubeconfigs/ts-main-${KUBE_ENV}.conf"
+          chmod 600 "$RUNNER_TEMP/kubeconfigs/ts-main-${KUBE_ENV}.conf"
+
+          fetch ts-cloudflare-dns01-token note > "$RUNNER_TEMP/cloudflare-dns01-token.txt"
+          fetch ts-code-server-password   note > "$RUNNER_TEMP/code-server-password.txt"
+          chmod 600 "$RUNNER_TEMP/cloudflare-dns01-token.txt" "$RUNNER_TEMP/code-server-password.txt"
+
+          {
+            echo "TS_KUBECONFIG_DIR=$RUNNER_TEMP/kubeconfigs"
+            echo "KUBECONFIG=$RUNNER_TEMP/kubeconfigs/ts-main-${KUBE_ENV}.conf"
+            echo "TS_CF_DNS01_TOKEN_FILE=$RUNNER_TEMP/cloudflare-dns01-token.txt"
+            echo "TS_CODE_SERVER_PASSWORD_FILE=$RUNNER_TEMP/code-server-password.txt"
+          } >> "$GITHUB_ENV"
+        fi
+
