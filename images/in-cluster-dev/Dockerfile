@@ -57,7 +57,7 @@ RUN curl -fsSL "https://get.pulumi.com/releases/sdk/pulumi-${PULUMI_VERSION}-lin
 # Python deps (ansible, proxmoxer, pulumi plugins) mirror what iac-runner installs
 COPY requirements.txt /tmp/requirements.txt
 COPY deployment/pulumi-proxmox/requirements.txt /tmp/pulumi-proxmox-requirements.txt
-RUN pip3 install --break-system-packages --upgrade setuptools pip \
+RUN pip3 install --break-system-packages --upgrade setuptools \
     && pip3 install --break-system-packages -r /tmp/requirements.txt \
     && pip3 install --break-system-packages -r /tmp/pulumi-proxmox-requirements.txt
 

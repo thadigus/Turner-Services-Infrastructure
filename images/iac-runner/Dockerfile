@@ -24,14 +24,18 @@ RUN dnf -y install packer
 COPY .devcontainer/kubernetes.repo /etc/yum.repos.d/kubernetes.repo
 RUN dnf install -y kubectl
 
-# Install Helm and Helmfile (helm-diff plugin is installed below as the turneradmin user)
+# Install Helm + Helmfile + helm-diff plugin (system-wide so root and turneradmin both see it).
 ARG HELMFILE_VERSION=0.171.0
-RUN curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-RUN curl -fsSL -o /tmp/helmfile.tgz \
-      "https://github.com/helmfile/helmfile/releases/download/v${HELMFILE_VERSION}/helmfile_${HELMFILE_VERSION}_linux_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" \
+ENV HELM_PLUGINS=/usr/local/share/helm/plugins
+RUN curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash \
+    && curl -fsSL -o /tmp/helmfile.tgz \
+        "https://github.com/helmfile/helmfile/releases/download/v${HELMFILE_VERSION}/helmfile_${HELMFILE_VERSION}_linux_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" \
     && tar -xzf /tmp/helmfile.tgz -C /usr/local/bin helmfile \
     && chmod +x /usr/local/bin/helmfile \
-    && rm /tmp/helmfile.tgz
+    && rm /tmp/helmfile.tgz \
+    && mkdir -p "${HELM_PLUGINS}" \
+    && helm plugin install https://github.com/databus23/helm-diff \
+    && chmod -R a+rX /usr/local/share/helm
 
 # Create the turneradmin user as an administrator
 RUN groupadd turneradmin
@@ -63,8 +67,4 @@ RUN git config --global --add safe.directory /workspaces
 # Install Pulumi
 RUN curl -fsSL https://get.pulumi.com | sh
 
-# Install helm-diff plugin (required by `helmfile diff`); runs as turneradmin so plugin lives in this user's helm home
-RUN helm plugin install https://github.com/databus23/helm-diff
-
-# Launch whatever shell we end up picking...
 CMD ["/bin/bash"]
