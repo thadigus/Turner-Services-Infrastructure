@@ -32,8 +32,7 @@ jobs:
     needs: download-isos
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
-      options: --user root
-      network: host
+      options: --user root -v /var/run/docker.sock:/var/run/docker.sock
     steps:
       - uses: actions/checkout@v6
         with:
@@ -43,7 +42,23 @@ jobs:
         with:
           proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
           scope: packer
-      - run: bash images/build-scripts/ubuntu-packer-build-rack.sh
+      - name: Packer build (host-network sibling)
+        run: |
+          host_work_root=$(docker inspect "$(hostname)" --format '{{range .Mounts}}{{if eq .Destination "/__w"}}{{.Source}}{{end}}{{end}}')
+          host_workspace="${host_work_root}${GITHUB_WORKSPACE#/__w}"
+          host_temp="${host_work_root}${RUNNER_TEMP#/__w}"
+          docker run --rm \
+            --network host --user root \
+            -v "$host_workspace":"$GITHUB_WORKSPACE" \
+            -v "$host_temp":"$RUNNER_TEMP" \
+            -w "$GITHUB_WORKSPACE" \
+            -e TS_PROXMOX_PACKER_USER \
+            -e TS_PROXMOX_PACKER_APIKEY \
+            -e TS_PROXMOX_TOKEN_SECRET \
+            -e TS_WIN_TURNERANS_SVC_PASSWD \
+            -e TS_TURNERANS_SVC_SSH_PRIVKEY \
+            ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
+            bash images/build-scripts/ubuntu-packer-build-rack.sh
       - name: Restore workspace ownership
         if: always()
         run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
@@ -54,8 +69,7 @@ jobs:
     needs: download-isos
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
-      options: --user root
-      network: host
+      options: --user root -v /var/run/docker.sock:/var/run/docker.sock
     steps:
       - uses: actions/checkout@v6
         with:
@@ -65,7 +79,23 @@ jobs:
         with:
           proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
           scope: packer
-      - run: bash images/build-scripts/rhel-packer-build-rack.sh
+      - name: Packer build (host-network sibling)
+        run: |
+          host_work_root=$(docker inspect "$(hostname)" --format '{{range .Mounts}}{{if eq .Destination "/__w"}}{{.Source}}{{end}}{{end}}')
+          host_workspace="${host_work_root}${GITHUB_WORKSPACE#/__w}"
+          host_temp="${host_work_root}${RUNNER_TEMP#/__w}"
+          docker run --rm \
+            --network host --user root \
+            -v "$host_workspace":"$GITHUB_WORKSPACE" \
+            -v "$host_temp":"$RUNNER_TEMP" \
+            -w "$GITHUB_WORKSPACE" \
+            -e TS_PROXMOX_PACKER_USER \
+            -e TS_PROXMOX_PACKER_APIKEY \
+            -e TS_PROXMOX_TOKEN_SECRET \
+            -e TS_WIN_TURNERANS_SVC_PASSWD \
+            -e TS_TURNERANS_SVC_SSH_PRIVKEY \
+            ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
+            bash images/build-scripts/rhel-packer-build-rack.sh
       - name: Restore workspace ownership
         if: always()
         run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
@@ -76,8 +106,7 @@ jobs:
     needs: download-isos
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
-      options: --user root
-      network: host
+      options: --user root -v /var/run/docker.sock:/var/run/docker.sock
     steps:
       - uses: actions/checkout@v6
         with:
@@ -87,7 +116,23 @@ jobs:
         with:
           proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
           scope: packer
-      - run: bash images/build-scripts/windows-packer-build-rack.sh
+      - name: Packer build (host-network sibling)
+        run: |
+          host_work_root=$(docker inspect "$(hostname)" --format '{{range .Mounts}}{{if eq .Destination "/__w"}}{{.Source}}{{end}}{{end}}')
+          host_workspace="${host_work_root}${GITHUB_WORKSPACE#/__w}"
+          host_temp="${host_work_root}${RUNNER_TEMP#/__w}"
+          docker run --rm \
+            --network host --user root \
+            -v "$host_workspace":"$GITHUB_WORKSPACE" \
+            -v "$host_temp":"$RUNNER_TEMP" \
+            -w "$GITHUB_WORKSPACE" \
+            -e TS_PROXMOX_PACKER_USER \
+            -e TS_PROXMOX_PACKER_APIKEY \
+            -e TS_PROXMOX_TOKEN_SECRET \
+            -e TS_WIN_TURNERANS_SVC_PASSWD \
+            -e TS_TURNERANS_SVC_SSH_PRIVKEY \
+            ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
+            bash images/build-scripts/windows-packer-build-rack.sh
       - name: Restore workspace ownership
         if: always()
         run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
@@ -98,8 +143,7 @@ jobs:
     needs: download-isos
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
-      options: --user root
-      network: host
+      options: --user root -v /var/run/docker.sock:/var/run/docker.sock
     steps:
       - uses: actions/checkout@v6
         with:
@@ -109,7 +153,23 @@ jobs:
         with:
           proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
           scope: packer
-      - run: bash images/build-scripts/kali-packer-build-rack.sh
+      - name: Packer build (host-network sibling)
+        run: |
+          host_work_root=$(docker inspect "$(hostname)" --format '{{range .Mounts}}{{if eq .Destination "/__w"}}{{.Source}}{{end}}{{end}}')
+          host_workspace="${host_work_root}${GITHUB_WORKSPACE#/__w}"
+          host_temp="${host_work_root}${RUNNER_TEMP#/__w}"
+          docker run --rm \
+            --network host --user root \
+            -v "$host_workspace":"$GITHUB_WORKSPACE" \
+            -v "$host_temp":"$RUNNER_TEMP" \
+            -w "$GITHUB_WORKSPACE" \
+            -e TS_PROXMOX_PACKER_USER \
+            -e TS_PROXMOX_PACKER_APIKEY \
+            -e TS_PROXMOX_TOKEN_SECRET \
+            -e TS_WIN_TURNERANS_SVC_PASSWD \
+            -e TS_TURNERANS_SVC_SSH_PRIVKEY \
+            ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
+            bash images/build-scripts/kali-packer-build-rack.sh
       - name: Restore workspace ownership
         if: always()
         run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
