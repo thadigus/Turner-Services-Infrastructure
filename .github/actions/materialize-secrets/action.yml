@@ -28,13 +28,13 @@ runs:
     - name: Login to Proton Pass
       shell: bash
       env:
-        PROTON_PASS_PERSONAL_ACCESS_TOKEN: ${{ inputs.proton-pass-token }}
+        PROTON_PASS_PAT: ${{ inputs.proton-pass-token }}
         PROTON_PASS_KEY_PROVIDER: fs
         PROTON_PASS_SESSION_DIR: ${{ runner.temp }}/pass-session
       run: |
         set -euo pipefail
         mkdir -p "$PROTON_PASS_SESSION_DIR"
-        pass-cli login >/dev/null
+        pass-cli login --pat "$PROTON_PASS_PAT" >/dev/null
         echo "PROTON_PASS_KEY_PROVIDER=fs" >> "$GITHUB_ENV"
         echo "PROTON_PASS_SESSION_DIR=$PROTON_PASS_SESSION_DIR" >> "$GITHUB_ENV"
 
