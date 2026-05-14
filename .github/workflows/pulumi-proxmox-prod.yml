@@ -19,6 +19,12 @@ jobs:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
 
+      - name: Materialize secrets from Proton Pass
+        uses: ./.github/actions/materialize-secrets
+        with:
+          proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
+          scope: ansible
+
       - name: Pulumi Up (production)
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}

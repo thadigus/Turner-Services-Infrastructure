@@ -212,6 +212,10 @@ for target in "${targets[@]}"; do
     ANSIBLE_ROLES_PATH="${REPO_ROOT}/roles${ANSIBLE_ROLES_PATH:+:${ANSIBLE_ROLES_PATH}}" \
     ansible-playbook \
       -i "${ANSIBLE_INVENTORY}" \
+      --private-key "${TS_TURNERANS_SVC_SSH_PRIVKEY}" \
+      --extra-vars "win_turneradmin_passwd=${TS_WIN_TURNERADMIN_PASSWD}" \
+      --extra-vars "win_turnerans_svc_passwd=${TS_WIN_TURNERANS_SVC_PASSWD}" \
+      --extra-vars "unifi_api_key=${TS_UNIFI_API_KEY}" \
       "${ANSIBLE_PLAYBOOK}" \
       --limit "${limit_expr}"
 
@@ -222,6 +226,7 @@ for target in "${targets[@]}"; do
       ANSIBLE_ROLES_PATH="${REPO_ROOT}/roles${ANSIBLE_ROLES_PATH:+:${ANSIBLE_ROLES_PATH}}" \
       ansible-playbook \
         -i "${ANSIBLE_INVENTORY}" \
+        --private-key "${TS_TURNERANS_SVC_SSH_PRIVKEY}" \
         "${REBOOT_PLAYBOOK}" \
         --limit "${linux_changed_host_limit}"
     fi
