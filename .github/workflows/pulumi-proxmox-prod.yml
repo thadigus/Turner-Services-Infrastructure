@@ -28,3 +28,7 @@ jobs:
         run: |
           export PATH="/home/turneradmin/.pulumi/bin:${PATH}"
           bash ./run-pulumi-up.sh --prod -u
+
+      - name: Restore workspace ownership
+        if: always()
+        run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
