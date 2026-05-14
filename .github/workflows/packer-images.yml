@@ -21,6 +21,9 @@ jobs:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
       - run: ansible-playbook images/download-isos.yml
+      - name: Restore workspace ownership
+        if: always()
+        run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
 
   ubuntu-packer-build:
     name: Ubuntu Packer Build

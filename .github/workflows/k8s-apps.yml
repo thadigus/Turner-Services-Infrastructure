@@ -74,3 +74,9 @@ jobs:
         env:
           KUBECONFIG: turner-services-sensitive-repo/kubeconfigs/ts-main-${{ steps.env.outputs.name }}.conf
         run: scripts/run-k8s-app.sh apply --env ${{ steps.env.outputs.name }}
+
+      # Container ran as root and wrote to the bind-mounted workspace. Hand
+      # ownership back to the runner host user so the next checkout works.
+      - name: Restore workspace ownership
+        if: always()
+        run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
