@@ -32,7 +32,8 @@ jobs:
     needs: download-isos
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
-      options: --user root --network host
+      options: --user root
+      network: host
     steps:
       - uses: actions/checkout@v6
         with:
@@ -53,7 +54,8 @@ jobs:
     needs: download-isos
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
-      options: --user root --network host
+      options: --user root
+      network: host
     steps:
       - uses: actions/checkout@v6
         with:
@@ -74,7 +76,8 @@ jobs:
     needs: download-isos
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
-      options: --user root --network host
+      options: --user root
+      network: host
     steps:
       - uses: actions/checkout@v6
         with:
@@ -95,7 +98,8 @@ jobs:
     needs: download-isos
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
-      options: --user root --network host
+      options: --user root
+      network: host
     steps:
       - uses: actions/checkout@v6
         with:
