@@ -34,6 +34,7 @@ runs:
       run: |
         set -euo pipefail
         mkdir -p "$PROTON_PASS_SESSION_DIR"
+        pass-cli logout >/dev/null 2>&1 || true
         pass-cli login --pat "$PROTON_PASS_PAT" >/dev/null
         echo "PROTON_PASS_KEY_PROVIDER=fs" >> "$GITHUB_ENV"
         echo "PROTON_PASS_SESSION_DIR=$PROTON_PASS_SESSION_DIR" >> "$GITHUB_ENV"
