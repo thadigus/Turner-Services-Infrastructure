@@ -2,6 +2,13 @@ name: Packer Images
 
 on:
   workflow_dispatch:
+    inputs:
+      which:
+        description: Which builds to run
+        required: false
+        default: all
+        type: choice
+        options: [all, ubuntu, rhel, windows, kali]
   schedule:
     - cron: '30 4 * * 1'
 
@@ -30,6 +37,7 @@ jobs:
     name: Ubuntu Packer Build
     runs-on: self-hosted
     needs: download-isos
+    if: ${{ github.event_name == 'schedule' || inputs.which == 'all' || inputs.which == 'ubuntu' }}
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
       options: --user root -v /var/run/docker.sock:/var/run/docker.sock
@@ -67,6 +75,7 @@ jobs:
     name: RHEL Packer Build
     runs-on: self-hosted
     needs: download-isos
+    if: ${{ github.event_name == 'schedule' || inputs.which == 'all' || inputs.which == 'rhel' }}
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
       options: --user root -v /var/run/docker.sock:/var/run/docker.sock
@@ -104,6 +113,7 @@ jobs:
     name: Windows Packer Build
     runs-on: self-hosted
     needs: download-isos
+    if: ${{ github.event_name == 'schedule' || inputs.which == 'all' || inputs.which == 'windows' }}
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
       options: --user root -v /var/run/docker.sock:/var/run/docker.sock
@@ -141,6 +151,7 @@ jobs:
     name: Kali Packer Build
     runs-on: self-hosted
     needs: download-isos
+    if: ${{ github.event_name == 'schedule' || inputs.which == 'all' || inputs.which == 'kali' }}
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
       options: --user root -v /var/run/docker.sock:/var/run/docker.sock
