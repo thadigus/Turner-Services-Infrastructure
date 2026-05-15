@@ -51,7 +51,7 @@
     - name: Create turnerans_svc User account
       win_user:
         name: turnerans_svc
-        password: '{{ win_turnerans_svc_passwd }}'
+        password: '{{ win_turnerans_svc_passwd | default(lookup("env", "TS_WIN_TURNERANS_SVC_PASSWD")) }}'
         state: present
         groups:
           - Administrators
