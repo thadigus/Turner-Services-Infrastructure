@@ -8,7 +8,7 @@
 - name: Create turneradmin User
   win_user:
     name: turneradmin
-    password: '{{ win_turneradmin_passwd }}'
+    password: '{{ win_turneradmin_passwd | default(lookup("env", "TS_WIN_TURNERADMIN_PASSWD")) }}'
     state: present
     groups:
       - Administrators
