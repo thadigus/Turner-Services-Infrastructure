@@ -80,9 +80,10 @@ runs:
         fi
 
         if [ "$want_packer" = 1 ]; then
-          gha_secret_env TS_PROXMOX_PACKER_USER   "$(fetch ts-proxmox-packer-apitoken username)"
-          gha_secret_env TS_PROXMOX_PACKER_APIKEY "$(fetch ts-proxmox-packer-apitoken password)"
+          gha_secret_env TS_PROXMOX_PACKER_USER      "$(fetch ts-proxmox-packer-apitoken username)"
+          gha_secret_env TS_PROXMOX_PACKER_APIKEY    "$(fetch ts-proxmox-packer-apitoken password)"
           gha_secret_env TS_WIN_TURNERANS_SVC_PASSWD "$(fetch ts-windows-turnerans_svc password)"
+          gha_secret_env TS_WIN_TURNERADMIN_PASSWD   "$(fetch ts-windows-turneradmin password)"
         fi
 
         if [ "$want_k8s" = 1 ]; then

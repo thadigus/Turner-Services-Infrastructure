@@ -64,6 +64,7 @@ jobs:
             -e TS_PROXMOX_PACKER_APIKEY \
             -e TS_PROXMOX_TOKEN_SECRET \
             -e TS_WIN_TURNERANS_SVC_PASSWD \
+            -e TS_WIN_TURNERADMIN_PASSWD \
             -e TS_TURNERANS_SVC_SSH_PRIVKEY \
             ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
             bash images/build-scripts/ubuntu-packer-build-rack.sh
@@ -102,6 +103,7 @@ jobs:
             -e TS_PROXMOX_PACKER_APIKEY \
             -e TS_PROXMOX_TOKEN_SECRET \
             -e TS_WIN_TURNERANS_SVC_PASSWD \
+            -e TS_WIN_TURNERADMIN_PASSWD \
             -e TS_TURNERANS_SVC_SSH_PRIVKEY \
             ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
             bash images/build-scripts/rhel-packer-build-rack.sh
@@ -140,6 +142,7 @@ jobs:
             -e TS_PROXMOX_PACKER_APIKEY \
             -e TS_PROXMOX_TOKEN_SECRET \
             -e TS_WIN_TURNERANS_SVC_PASSWD \
+            -e TS_WIN_TURNERADMIN_PASSWD \
             -e TS_TURNERANS_SVC_SSH_PRIVKEY \
             ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
             bash images/build-scripts/windows-packer-build-rack.sh
@@ -178,6 +181,7 @@ jobs:
             -e TS_PROXMOX_PACKER_APIKEY \
             -e TS_PROXMOX_TOKEN_SECRET \
             -e TS_WIN_TURNERANS_SVC_PASSWD \
+            -e TS_WIN_TURNERADMIN_PASSWD \
             -e TS_TURNERANS_SVC_SSH_PRIVKEY \
             ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
             bash images/build-scripts/kali-packer-build-rack.sh
