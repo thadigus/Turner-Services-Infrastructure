@@ -4,6 +4,7 @@ rpi-pxeboot/scripts/.work/
 **/__pycache__/
 
 .secrets/
+.claude/
 
 **/*_id_rsa
 **/*_id_ed25519
