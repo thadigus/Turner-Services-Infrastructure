@@ -1,0 +1,435 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from hashlib import sha256
+from pathlib import Path
+import os
+import re
+from typing import Any, Dict, Iterable, List, Optional
+
+import pulumi
+import yaml
+
+
+@dataclass(frozen=True)
+class StoragePlan:
+    lv: str
+    expand_by: str
+
+
+@dataclass(frozen=True)
+class DnsRecordConfig:
+    name: str
+    type: str
+    value: Optional[str] = None
+    enabled: bool = True
+    ttl: Optional[int] = None
+    priority: Optional[int] = None
+    port: Optional[int] = None
+    weight: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class VmConfig:
+    name: str
+    prox_node: str
+    storage_location: Optional[str]
+    cpu_count: int
+    ram_amount: int
+    start_on_boot: bool
+    vm_state: str
+    mac_address: Optional[str] = None
+    template_name: Optional[str] = None
+    vm_type: Optional[str] = None
+    vlan: Optional[int] = None
+    ip_address: Optional[str] = None
+    dns_records: List[DnsRecordConfig] = field(default_factory=list)
+    unifi_network: Optional[str] = None
+    disk_amount: Optional[int] = None
+    disk_interface: str = "scsi0"
+    storage_plan: List[StoragePlan] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ServerListConfig:
+    template_node: Optional[str]
+    virtual_machines: List[VmConfig]
+    dns_domain: Optional[str] = None
+    unifi_networks: Dict[int, str] = field(default_factory=dict)
+
+
+BASE_DIR = Path(__file__).resolve().parent
+MAC_RE = re.compile(r"^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")
+
+
+def load_yaml(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        raise ValueError(f"YAML file not found: {path}")
+    with path.open("r", encoding="utf-8") as file:
+        data = yaml.safe_load(file) or {}
+    if not isinstance(data, dict):
+        raise ValueError(f"Expected mapping at root of {path}")
+    return data
+
+
+def first_existing(paths: Iterable[Path]) -> Optional[Path]:
+    for path in paths:
+        if path.exists():
+            return path
+    return None
+
+
+def get_config_value(config: pulumi.Config, *keys: str) -> Optional[str]:
+    for key in keys:
+        value = config.get(key)
+        if value is not None:
+            return value
+    return None
+
+
+def get_config_secret(config: pulumi.Config, *keys: str) -> Optional[pulumi.Output[str]]:
+    for key in keys:
+        value = config.get_secret(key)
+        if value is not None:
+            return value
+    return None
+
+
+def parse_size_gb(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        raw = value.strip().lower()
+        if raw.startswith(("+", "=")):
+            raw = raw[1:].strip()
+        if raw in {"", "none", "null"}:
+            return None
+        number = ""
+        suffix = ""
+        for char in raw:
+            if char.isdigit() or char == ".":
+                number += char
+            else:
+                suffix += char
+        if not number:
+            raise ValueError(f"Invalid size value: {value}")
+        size = float(number)
+        suffix = suffix.strip()
+        if suffix in {"g", "gb", ""}:
+            return int(size)
+        if suffix in {"m", "mb"}:
+            return max(1, int(size / 1024))
+        if suffix in {"t", "tb"}:
+            return int(size * 1024)
+    raise ValueError(f"Invalid size value: {value}")
+
+
+def parse_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return bool(value)
+
+
+def parse_optional_string(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    parsed = str(value).strip()
+    if not parsed or parsed.lower() in {"none", "null"}:
+        return None
+    return parsed
+
+
+def parse_vlan(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip().lower() in {"", "none", "null"}:
+        return None
+    return int(value)
+
+
+def normalize_mac_address(value: Any) -> Optional[str]:
+    parsed = parse_optional_string(value)
+    if parsed is None:
+        return None
+    normalized = parsed.replace("-", ":").lower()
+    if not MAC_RE.match(normalized):
+        raise ValueError(f"Invalid MAC address: {value}")
+    return normalized
+
+
+def generate_mac_address(stack: str, vm_name: str, prefix: str = "02:00:00") -> str:
+    normalized_prefix = normalize_mac_address(f"{prefix}:00:00:00")
+    if normalized_prefix is None:
+        raise ValueError(f"Invalid generated MAC prefix: {prefix}")
+    prefix_parts = normalized_prefix.split(":")[:3]
+    digest = sha256(f"{stack}:{vm_name}".encode("utf-8")).digest()
+    return ":".join(prefix_parts + [f"{part:02x}" for part in digest[:3]])
+
+
+def parse_dns_record(raw: Any, ip_address: Optional[str]) -> DnsRecordConfig:
+    if isinstance(raw, str):
+        name = parse_optional_string(raw)
+        if name is None:
+            raise ValueError("DNS record name cannot be empty")
+        return DnsRecordConfig(name=name, type="A", value=ip_address)
+
+    if not isinstance(raw, dict):
+        raise ValueError(f"DNS record must be a string or mapping: {raw}")
+
+    name = parse_optional_string(raw.get("name") or raw.get("key"))
+    if name is None:
+        raise ValueError(f"DNS record missing name: {raw}")
+    record_type = str(raw.get("type") or raw.get("record_type") or "A").upper()
+    value = parse_optional_string(raw.get("value")) or ip_address
+    return DnsRecordConfig(
+        name=name,
+        type=record_type,
+        value=value,
+        enabled=parse_bool(raw.get("enabled"), True),
+        ttl=int(raw["ttl"]) if raw.get("ttl") is not None else None,
+        priority=int(raw["priority"]) if raw.get("priority") is not None else None,
+        port=int(raw["port"]) if raw.get("port") is not None else None,
+        weight=int(raw["weight"]) if raw.get("weight") is not None else None,
+    )
+
+
+def parse_dns_records(raw: Dict[str, Any], ip_address: Optional[str], dns_domain: Optional[str]) -> List[DnsRecordConfig]:
+    records: List[DnsRecordConfig] = []
+
+    dns_name = parse_optional_string(raw.get("dns_name") or raw.get("fqdn"))
+    if dns_name:
+        records.append(DnsRecordConfig(name=dns_name, type="A", value=ip_address))
+
+    dns_names = raw.get("dns_names") or []
+    if isinstance(dns_names, str):
+        dns_names = [dns_names]
+    for entry in dns_names:
+        records.append(parse_dns_record(entry, ip_address))
+
+    dns_records = raw.get("dns_records") or raw.get("dns") or []
+    if isinstance(dns_records, (str, dict)):
+        dns_records = [dns_records]
+    for entry in dns_records:
+        records.append(parse_dns_record(entry, ip_address))
+
+    auto_dns = raw.get("auto_dns")
+    if auto_dns is None:
+        auto_dns = raw.get("manage_dns")
+    if parse_bool(auto_dns, False):
+        if not dns_domain:
+            raise ValueError(f"VM '{raw.get('name')}' enables auto_dns but no dns_domain is configured.")
+        records.append(
+            DnsRecordConfig(
+                name=f"{raw.get('name')}.{dns_domain}".strip("."),
+                type="A",
+                value=ip_address,
+            )
+        )
+
+    seen: set[tuple[str, str]] = set()
+    unique: List[DnsRecordConfig] = []
+    for record in records:
+        key = (record.name.lower(), record.type.upper())
+        if key in seen:
+            raise ValueError(f"Duplicate DNS record for VM '{raw.get('name')}': {record.name} {record.type}")
+        seen.add(key)
+        unique.append(record)
+    return unique
+
+
+def parse_storage_plan(raw: Dict[str, Any]) -> List[StoragePlan]:
+    storage_plan_raw = raw.get("storage_plan")
+    storage_plan: List[StoragePlan] = []
+    if not storage_plan_raw:
+        return storage_plan
+    for entry in storage_plan_raw:
+        if not isinstance(entry, dict):
+            continue
+        lv = str(entry.get("lv", "")).strip()
+        expand_by = str(entry.get("expand_by", "")).strip()
+        if not lv and isinstance(entry.get("lv_targets"), dict):
+            lv_targets = dict(entry.get("lv_targets") or {})
+            for legacy_lv, legacy_size in lv_targets.items():
+                storage_plan.append(
+                    StoragePlan(
+                        lv=str(legacy_lv).strip(),
+                        expand_by=str(legacy_size).strip(),
+                    )
+                )
+            continue
+        if lv and expand_by:
+            storage_plan.append(StoragePlan(lv=lv, expand_by=expand_by))
+    return storage_plan
+
+
+def parse_disk_amount(raw: Dict[str, Any], storage_plan: List[StoragePlan], vm_name: str) -> Optional[int]:
+    disk_amount = parse_size_gb(raw.get("disk_amount"))
+    planned_total = None
+    if storage_plan:
+        total = 0
+        for plan in storage_plan:
+            parsed = parse_size_gb(plan.expand_by)
+            if parsed is None:
+                continue
+            total += parsed
+        planned_total = total if total > 0 else None
+    if disk_amount is None and planned_total is not None:
+        # Use a migration-safe baseline so removing explicit disk_amount from
+        # existing 40G deployments does not cause shrink pressure.
+        disk_amount = 40 + planned_total
+    if disk_amount is not None and planned_total is not None and planned_total > disk_amount:
+        raise ValueError(
+            f"Storage plan total ({planned_total}G) exceeds disk_amount ({disk_amount}G) for VM '{vm_name}'."
+        )
+    return disk_amount
+
+
+def parse_unifi_networks(raw: Any) -> Dict[int, str]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError("'unifi_networks' must be a mapping of VLAN ID to UniFi network name or ID")
+    networks: Dict[int, str] = {}
+    for vlan, network in raw.items():
+        parsed = parse_optional_string(network)
+        if parsed is not None:
+            networks[int(vlan)] = parsed
+    return networks
+
+
+def parse_vm(raw: Dict[str, Any], stack: str, dns_domain: Optional[str], unifi_networks: Dict[int, str]) -> VmConfig:
+    name = str(raw.get("name", "")).strip()
+    prox_node = str(raw.get("prox_node", "")).strip()
+    if not name or not prox_node:
+        raise ValueError("Each VM must include non-empty 'name' and 'prox_node'")
+
+    storage_plan = parse_storage_plan(raw)
+    disk_amount = parse_disk_amount(raw, storage_plan, name)
+    vlan = parse_vlan(raw.get("vlan"))
+    ip_address = parse_optional_string(raw.get("ip_address") or raw.get("fixed_ip"))
+    explicit_mac_address = normalize_mac_address(raw.get("mac_address"))
+    mac_address = explicit_mac_address or (generate_mac_address(stack, name) if ip_address else None)
+    dns_records = parse_dns_records(raw, ip_address, dns_domain)
+    unifi_network = parse_optional_string(
+        raw.get("unifi_network_id") or raw.get("unifi_network") or raw.get("network_id")
+    )
+    if unifi_network is None and vlan is not None:
+        unifi_network = unifi_networks.get(vlan)
+
+    return VmConfig(
+        name=name,
+        prox_node=prox_node,
+        storage_location=parse_optional_string(raw.get("storage_location")),
+        cpu_count=int(raw.get("cpu_count", 1)),
+        ram_amount=int(raw.get("ram_amount", 512)),
+        start_on_boot=parse_bool(raw.get("start_on_boot"), True),
+        vm_state=str(raw.get("vm_state", "present")).lower(),
+        template_name=parse_optional_string(raw.get("template_name")),
+        vm_type=parse_optional_string(raw.get("vm_type") or raw.get("os_type")),
+        vlan=vlan,
+        mac_address=mac_address,
+        ip_address=ip_address,
+        dns_records=dns_records,
+        unifi_network=unifi_network,
+        disk_amount=disk_amount,
+        disk_interface=str(raw.get("disk_interface", "scsi0")).strip() or "scsi0",
+        storage_plan=storage_plan,
+    )
+
+
+def validate_server_list(config: ServerListConfig) -> None:
+    macs: Dict[str, str] = {}
+    ips: Dict[str, str] = {}
+    for vm in config.virtual_machines:
+        if vm.mac_address:
+            if vm.mac_address in macs:
+                raise ValueError(f"Duplicate MAC address {vm.mac_address} on {vm.name} and {macs[vm.mac_address]}")
+            macs[vm.mac_address] = vm.name
+        if vm.ip_address:
+            if vm.ip_address in ips:
+                raise ValueError(f"Duplicate IP address {vm.ip_address} on {vm.name} and {ips[vm.ip_address]}")
+            ips[vm.ip_address] = vm.name
+        for record in vm.dns_records:
+            if record.type in {"A", "AAAA"} and not record.value:
+                raise ValueError(f"DNS record {record.name} for VM '{vm.name}' needs an IP/value.")
+
+
+def load_server_list(path: Path, stack: Optional[str] = None) -> ServerListConfig:
+    data = load_yaml(path)
+    vms_raw = data.get("virtual_machines") or []
+    if not isinstance(vms_raw, list):
+        raise ValueError("'virtual_machines' must be a list")
+
+    stack_name = stack or pulumi.get_stack()
+    dns_domain = parse_optional_string(data.get("dns_domain") or data.get("domain"))
+    unifi_networks = parse_unifi_networks(data.get("unifi_networks"))
+    vms = [parse_vm(vm, stack_name, dns_domain, unifi_networks) for vm in vms_raw]
+    parsed = ServerListConfig(
+        template_node=parse_optional_string(data.get("template_node")),
+        virtual_machines=vms,
+        dns_domain=dns_domain,
+        unifi_networks=unifi_networks,
+    )
+    validate_server_list(parsed)
+    return parsed
+
+
+def resolve_paths(config: pulumi.Config) -> tuple[Path, Optional[Path]]:
+    server_list_path = os.getenv("TS_SERVER_LIST_PATH") or config.get("serverListPath")
+    inventory_path = config.get("inventoryPath")
+
+    if server_list_path:
+        resolved_server_list = (BASE_DIR / server_list_path).resolve()
+    else:
+        resolved_server_list = first_existing(
+            [
+                BASE_DIR / "../../turner-services-sensitive-repo/server-list-prod.yml",
+                BASE_DIR / "../server-list.example.yml",
+            ]
+        )
+
+    if resolved_server_list is None:
+        raise ValueError("No server list file found. Set serverListPath in Pulumi config.")
+
+    resolved_inventory = None
+    if inventory_path:
+        resolved_inventory = (BASE_DIR / inventory_path).resolve()
+    else:
+        resolved_inventory = first_existing(
+            [
+                BASE_DIR / "../../turner-services-sensitive-repo/inventories/ansible-inv-rack.proxmox.yml",
+                BASE_DIR / "../../inventories/ansible-inv-example.proxmox.yml",
+            ]
+        )
+
+    if resolved_inventory is None:
+        pulumi.log.warn("No inventory file found; Proxmox credentials must be set via Pulumi config.")
+
+    return resolved_server_list, resolved_inventory
+
+
+def resolve_stack_environment(config: pulumi.Config, server_list_file: Path) -> str:
+    env_hint = get_config_value(config, "environment", "stackEnvironment")
+    candidates = [
+        (env_hint or "").strip().lower(),
+        pulumi.get_stack().strip().lower(),
+        server_list_file.stem.strip().lower(),
+    ]
+
+    for value in candidates:
+        if any(token in value for token in ("prod", "production")):
+            return "production"
+        if any(token in value for token in ("test", "testing")):
+            return "test"
+
+    raise ValueError(
+        "Unable to determine stack environment for VM tags. "
+        "Use a stack/server list name containing 'prod' or 'test', "
+        "or set Pulumi config key 'environment' to 'production' or 'test'."
+    )

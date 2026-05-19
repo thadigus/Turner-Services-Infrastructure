@@ -1,3 +1,4 @@
 pulumi>=3.0.0,<4.0.0
 pulumi_proxmoxve<8.0.0
+pulumiverse_unifi
 pyyaml

@@ -1,5 +1,5 @@
 name: ts-proxmox
-description: Proxmox IaC deployment for Turner Services
+description: Proxmox and UniFi IaC deployment for Turner Services
 runtime:
   name: python
   options:

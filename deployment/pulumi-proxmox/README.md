@@ -1,14 +1,16 @@
-# Pulumi Proxmox VM Deployment
+# Pulumi Proxmox + UniFi VM Deployment
 
-This directory contains a Pulumi program that provisions Proxmox VMs from a YAML
-server list. It supports template cloning, disk sizing (including resize after
-clone), and basic input validation.
+This directory contains one Pulumi stack that provisions UniFi network identity
+first, then Proxmox VMs from the same YAML server list. UniFi can manage DHCP
+reservations and static DNS records for a VM before Proxmox creates it with the
+same MAC address.
 
 ## Requirements
 
 - Pulumi CLI
 - Python 3.9+
 - Proxmox VE API access (password or API token)
+- UniFi Network API access for managed DNS/DHCP reservations
 
 ## Quick Start
 
@@ -40,14 +42,26 @@ pulumi config set proxmox:endpoint https://<pve-host>:8006
 pulumi config set --secret proxmox:password <password>
 ```
 
-4) (Optional) point at custom server list and inventory files:
+4) Configure UniFi access. By default, the program reads
+`../../turner-services-sensitive-repo/unifi-consoles.yml` and the API key
+environment variable named there, usually `TS_UNIFI_API_KEY`.
+
+You can also configure it directly:
+
+```
+pulumi config set unifi:apiUrl https://<unifi-host>
+pulumi config set unifi:site default
+pulumi config set --secret unifi:apiKey <api-key>
+```
+
+5) (Optional) point at custom server list and inventory files:
 
 ```
 pulumi config set serverListPath ../../turner-services-sensitive-repo/server-list-prod.yml
 pulumi config set inventoryPath ../../turner-services-sensitive-repo/inventories/ansible-inv-rack.proxmox.yml
 ```
 
-5) Preview and deploy:
+6) Preview and deploy:
 
 ```
 pulumi up
@@ -120,6 +134,9 @@ You can override these with Pulumi config values:
 - `serverListPath`
 - `inventoryPath`
 - `environment` (`production` or `test`) for VM tagging
+- `unifiEnabled` (`true` by default; set `false` only when no VM in the server list requests UniFi resources)
+- `unifi:apiUrl`, `unifi:apiKey`, `unifi:site`, `unifi:console`, `unifi:consolesPath`, `unifi:allowInsecure`
+
 You can also override the server list via env var `TS_SERVER_LIST_PATH`, which
 is useful for local/dev runs.
 
@@ -143,6 +160,8 @@ Environment is resolved from (in order):
 Top-level keys:
 
 - `template_node`: Proxmox node where templates live
+- `dns_domain`: optional default domain used when a VM sets `auto_dns: true`
+- `unifi_networks`: optional map of VLAN ID to UniFi network name or ID for DHCP reservations
 - `virtual_machines`: list of VM definitions
 
 VM fields (common):
@@ -154,6 +173,11 @@ VM fields (common):
 - CPU model is enforced to `x86-64-v3` for deployed VMs
 - `ram_amount` (MB, default 512)
 - `vlan` (optional)
+- `mac_address` (optional) - if omitted on a VM with `ip_address`, Pulumi deterministically creates one from the stack and VM name; VMs without `ip_address` keep provider/default MAC behavior
+- `ip_address` or `fixed_ip` (optional) - enables a UniFi DHCP reservation for this VM
+- `dns_name`, `dns_names`, or `dns_records` (optional) - creates UniFi static DNS records
+- `auto_dns` (optional) - creates `<name>.<dns_domain>` as an A record pointing at `ip_address`
+- `unifi_network` / `unifi_network_id` / `network_id` (optional) - UniFi network name or ID for the reservation; otherwise `unifi_networks[vlan]` is used when present
 - `start_on_boot` (default true)
 - `vm_state` (present/absent, default present)
 - `vm_type` or `os_type` (optional) - use `windows` for Windows tagging; defaults to Linux when unspecified
@@ -175,6 +199,37 @@ Storage plan fields:
 - `storage_plan` list entries with:
   - `lv` (mountpoint, for example `/var`)
   - `expand_by` (relative growth amount, for example `10G`)
+
+UniFi example:
+
+```yaml
+template_node: prox4
+dns_domain: turnerservices.cloud
+unifi_networks:
+  3: Servers
+
+virtual_machines:
+  - name: app-01
+    template_name: ubuntu-base-image
+    prox_node: prox3
+    storage_location: NFS-ProdVolRepl
+    cpu_count: 2
+    ram_amount: 4096
+    vlan: 3
+    ip_address: 10.0.3.80
+    auto_dns: true
+    dns_records:
+      - name: app.turnerservices.cloud
+        type: A
+    storage_plan:
+      - lv: /var
+        expand_by: 20G
+```
+
+For that VM Pulumi creates `unifi:iam/user:User` first, using the VM MAC and
+`fixed_ip`, then creates any `unifi:dns/record:Record` entries, and finally
+creates the Proxmox VM with the same MAC address. Explicit `mac_address` values
+are preserved for existing VMs.
 
 ### Disk Size Validation
 

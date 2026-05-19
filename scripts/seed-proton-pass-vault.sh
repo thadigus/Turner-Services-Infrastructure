@@ -89,7 +89,7 @@ ensure_note_from_file ts-code-server-password      "${SENSITIVE_DIR}/code-server
 
 # Credential items (prompted unless TS_* is exported)
 need_creds=0
-for t in ts-windows-turneradmin ts-windows-turnerans_svc ts-proxmox-packer-apitoken ts-unifi-apikey; do
+for t in ts-windows-turneradmin ts-windows-turnerans_svc ts-proxmox-packer-apitoken ts-unifi-apikey ts-pulumi-access-token; do
   item_exists "$t" || { need_creds=1; break; }
 done
 
@@ -114,6 +114,10 @@ if (( need_creds )); then
   if ! item_exists ts-unifi-apikey; then
     pw="$(prompt_secret TS_UNIFI_API_KEY 'UniFi local Network API key')"
     ensure_login ts-unifi-apikey unifi "$pw"
+  fi
+  if ! item_exists ts-pulumi-access-token; then
+    pw="$(prompt_secret PULUMI_ACCESS_TOKEN 'Pulumi access token')"
+    ensure_login ts-pulumi-access-token pulumi "$pw"
   fi
 fi
 

@@ -37,8 +37,9 @@ WIN_TURNERADMIN_PASSWD="$(fetch ts-windows-turneradmin password)"
 WIN_TURNERANS_SVC_PASSWD="$(fetch ts-windows-turnerans_svc password)"
 PROXMOX_PACKER_USER="$(fetch ts-proxmox-packer-apitoken username)"
 PROXMOX_PACKER_APIKEY="$(fetch ts-proxmox-packer-apitoken password)"
-PROXMOX_TOKEN_SECRET="${PROXMOX_PACKER_APIKEY}"
+PROXMOX_VE_ENDPOINT="$(fetch ts-proxmox-packer-apitoken endpoint)"
 UNIFI_API_KEY="$(fetch ts-unifi-apikey password)"
+PULUMI_ACCESS_TOKEN_VALUE="$(fetch ts-pulumi-access-token password)"
 
 shq() { printf "%s" "$1" | sed "s/'/'\\\\''/g; s/^/'/; s/$/'/"; }
 
@@ -50,9 +51,13 @@ export TS_WIN_TURNERANS_SVC_PASSWD=$(shq "${WIN_TURNERANS_SVC_PASSWD}")
 
 export TS_PROXMOX_PACKER_USER=$(shq "${PROXMOX_PACKER_USER}")
 export TS_PROXMOX_PACKER_APIKEY=$(shq "${PROXMOX_PACKER_APIKEY}")
-export TS_PROXMOX_TOKEN_SECRET=$(shq "${PROXMOX_TOKEN_SECRET}")
+export PROXMOX_VE_ENDPOINT=$(shq "${PROXMOX_VE_ENDPOINT}")
+export PROXMOX_VE_USERNAME=$(shq "${PROXMOX_PACKER_USER}")
+export PROXMOX_VE_API_TOKEN=$(shq "${PROXMOX_PACKER_APIKEY}")
+export TS_PROXMOX_TOKEN_SECRET=$(shq "${PROXMOX_PACKER_APIKEY}")
 
 export TS_UNIFI_API_KEY=$(shq "${UNIFI_API_KEY}")
+export PULUMI_ACCESS_TOKEN=$(shq "${PULUMI_ACCESS_TOKEN_VALUE}")
 
 export TS_TURNERADMIN_SSH_PRIVKEY="${SECRETS_DIR}/ssh/turneradmin_id_rsa"
 export TS_TURNERANS_SVC_SSH_PRIVKEY="${SECRETS_DIR}/ssh/turnerans_svc_id_rsa"
@@ -67,7 +72,7 @@ chmod 600 "${SECRETS_DIR}/env.sh"
 
 unset WIN_TURNERADMIN_PASSWD WIN_TURNERANS_SVC_PASSWD \
       PROXMOX_PACKER_USER PROXMOX_PACKER_APIKEY PROXMOX_TOKEN_SECRET \
-      UNIFI_API_KEY
+      UNIFI_API_KEY PULUMI_ACCESS_TOKEN_VALUE
 
 echo "Wrote secrets to ${SECRETS_DIR}"
 echo "Source ${SECRETS_DIR}/env.sh (or open a new shell) to pick up exports."
