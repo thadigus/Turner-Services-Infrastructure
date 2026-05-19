@@ -1,6 +1,6 @@
 {{- if .Values.homepage }}
 resources:
-  # Secret populated from CI/local env so widget {{HOMEPAGE_VAR_*}} substitutions resolve.
+  # Secret populated from env so homepage's widget env-var substitutions can resolve at runtime.
   - apiVersion: v1
     kind: Secret
     metadata:
@@ -39,7 +39,7 @@ resources:
                 widget:
                   type: unifi
                   url: https://10.0.2.1
-                  key: "{{HOMEPAGE_VAR_UNIFI_KEY}}"
+                  key: "{{ `{{HOMEPAGE_VAR_UNIFI_KEY}}` }}"
             - Code Server:
                 href: https://code.turnerservices.cloud
                 description: VS Code in the browser
