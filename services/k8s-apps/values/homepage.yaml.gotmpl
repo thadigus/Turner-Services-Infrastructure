@@ -1,0 +1,128 @@
+{{- if .Values.homepage }}
+resources:
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: homepage-config
+      namespace: apps
+    data:
+      settings.yaml: |
+        title: Turner Services
+        theme: dark
+        color: slate
+      services.yaml: |
+        - Infrastructure:
+            - Proxmox:
+                href: https://prox.turnerservices.cloud
+                description: Virtualization — load-balanced across 5 hosts
+                icon: proxmox.png
+            - Code Server:
+                href: https://code.turnerservices.cloud
+                description: VS Code in the browser
+                icon: vscode.png
+        - Apps:
+            - Jellyfin:
+                href: https://jellyfin.turnerservices.cloud
+                description: Media server
+                icon: jellyfin.png
+      widgets.yaml: |
+        []
+      bookmarks.yaml: |
+        []
+      kubernetes.yaml: ""
+      docker.yaml: ""
+      custom.css: ""
+      custom.js: ""
+
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: homepage
+      namespace: apps
+      labels:
+        app.kubernetes.io/name: homepage
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: homepage
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: homepage
+        spec:
+          containers:
+            - name: homepage
+              image: ghcr.io/gethomepage/homepage:latest
+              imagePullPolicy: Always
+              ports:
+                - name: http
+                  containerPort: 3000
+              env:
+                # Pod IP is required in HOMEPAGE_ALLOWED_HOSTS so the kubelet probe (which dials the pod by IP) isn't rejected.
+                - name: MY_POD_IP
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: status.podIP
+                - name: HOMEPAGE_ALLOWED_HOSTS
+                  value: "$(MY_POD_IP):3000,{{ .Values.homepage.host }}"
+              volumeMounts:
+                - name: config
+                  mountPath: /app/config
+              readinessProbe:
+                httpGet:
+                  path: /
+                  port: http
+                initialDelaySeconds: 5
+                periodSeconds: 10
+              livenessProbe:
+                httpGet:
+                  path: /
+                  port: http
+                initialDelaySeconds: 30
+                periodSeconds: 30
+          volumes:
+            - name: config
+              configMap:
+                name: homepage-config
+
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: homepage
+      namespace: apps
+    spec:
+      selector:
+        app.kubernetes.io/name: homepage
+      ports:
+        - name: http
+          port: 80
+          targetPort: http
+
+  - apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: homepage
+      namespace: apps
+      annotations:
+        cert-manager.io/cluster-issuer: letsencrypt-prod
+    spec:
+      ingressClassName: nginx
+      tls:
+        - hosts:
+            - {{ .Values.homepage.host | quote }}
+          secretName: homepage-tls
+      rules:
+        - host: {{ .Values.homepage.host | quote }}
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: homepage
+                    port:
+                      number: 80
+{{- end }}

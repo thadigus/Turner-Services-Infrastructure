@@ -90,4 +90,12 @@ releases:
       layer: platform
     values:
       - values/proxmox-lb.yaml.gotmpl
+
+  - name: homepage
+    namespace: apps
+    chart: ./raw
+    labels:
+      layer: apps
+    values:
+      - values/homepage.yaml.gotmpl
 {{- end }}
