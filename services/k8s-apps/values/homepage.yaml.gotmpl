@@ -105,6 +105,12 @@ resources:
         metadata:
           labels:
             app.kubernetes.io/name: homepage
+          annotations:
+            # initContainer seeds the writable emptyDir at pod start, so a ConfigMap edit
+            # alone doesn't propagate. Tying this to GITHUB_SHA (or a local timestamp)
+            # forces a pod roll on every push and local apply, while drift-correction
+            # cron runs with the same SHA stay no-op.
+            rollout-trigger: {{ env "GITHUB_SHA" | default (now | date "20060102150405") | quote }}
         spec:
           # ConfigMap mounts are read-only; homepage writes logs to /app/config/logs.
           # Seed config into an emptyDir so the dir stays writable at runtime.
