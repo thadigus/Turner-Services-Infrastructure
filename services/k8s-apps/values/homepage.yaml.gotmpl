@@ -71,15 +71,15 @@ resources:
               volumeMounts:
                 - name: config
                   mountPath: /app/config
+              # TCP probes — HTTP probes get 500'd by HOMEPAGE_ALLOWED_HOSTS because
+              # kubelet's Host header doesn't match the configured allow-list.
               readinessProbe:
-                httpGet:
-                  path: /
+                tcpSocket:
                   port: http
                 initialDelaySeconds: 5
                 periodSeconds: 10
               livenessProbe:
-                httpGet:
-                  path: /
+                tcpSocket:
                   port: http
                 initialDelaySeconds: 30
                 periodSeconds: 30
