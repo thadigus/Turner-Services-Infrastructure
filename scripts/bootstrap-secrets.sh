@@ -38,7 +38,7 @@ WIN_TURNERANS_SVC_PASSWD="$(fetch ts-windows-turnerans_svc password)"
 PROXMOX_PACKER_USER="$(fetch ts-proxmox-packer-apitoken username)"
 PROXMOX_PACKER_APIKEY="$(fetch ts-proxmox-packer-apitoken password)"
 PROXMOX_TOKEN_SECRET="${PROXMOX_PACKER_APIKEY}"
-UNIFI_API_KEY="$(fetch ts-unifi-fwmaster-apikey password)"
+UNIFI_API_KEY="$(fetch ts-unifi-apikey password)"
 
 shq() { printf "%s" "$1" | sed "s/'/'\\\\''/g; s/^/'/; s/$/'/"; }
 

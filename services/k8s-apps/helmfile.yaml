@@ -81,3 +81,13 @@ releases:
       layer: apps
     values:
       - values/code-server.yaml.gotmpl
+
+{{- if eq .Environment.Name "prod" }}
+  - name: proxmox-lb
+    namespace: platform
+    chart: ./raw
+    labels:
+      layer: platform
+    values:
+      - values/proxmox-lb.yaml.gotmpl
+{{- end }}

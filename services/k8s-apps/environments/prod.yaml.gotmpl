@@ -21,3 +21,17 @@ codeServer:
     name: code-server-password
     namespace: apps
     key: password
+
+proxmoxLb:
+  host: prox.turnerservices.cloud
+  hosts:
+    - name: prox2
+      ip: 10.0.2.12
+    - name: prox3
+      ip: 10.0.2.13
+    - name: prox4
+      ip: 10.0.2.14
+    - name: prox5
+      ip: 10.0.2.17
+    - name: prox6
+      ip: 10.0.2.18

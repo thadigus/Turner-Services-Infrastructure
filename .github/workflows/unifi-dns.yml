@@ -1,0 +1,56 @@
+name: UniFi DNS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/unifi-dns-reconcile.py'
+      - 'scripts/unifi-dns-reconcile.sh'
+      - 'turner-services-sensitive-repo'
+      - '.github/workflows/unifi-dns.yml'
+  schedule:
+    - cron: '30 14 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print plan without applying
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: unifi-dns
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --user root
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.ACCESS_TOKEN }}
+          submodules: recursive
+
+      - name: Materialize secrets from Proton Pass
+        uses: ./.github/actions/materialize-secrets
+        with:
+          proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
+          scope: ansible
+
+      - name: Reconcile UniFi DNS
+        run: |
+          set -e
+          extra=()
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            extra+=("--check")
+          fi
+          scripts/unifi-dns-reconcile.sh "${extra[@]}"
+
+      - name: Restore workspace ownership
+        if: always()
+        run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
