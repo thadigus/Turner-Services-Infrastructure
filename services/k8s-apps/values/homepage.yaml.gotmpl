@@ -1,5 +1,15 @@
 {{- if .Values.homepage }}
 resources:
+  # Secret populated from CI/local env so widget {{HOMEPAGE_VAR_*}} substitutions resolve.
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: homepage-secrets
+      namespace: apps
+    type: Opaque
+    stringData:
+      HOMEPAGE_VAR_UNIFI_KEY: {{ requiredEnv "TS_UNIFI_API_KEY" | quote }}
+
   - apiVersion: v1
     kind: ConfigMap
     metadata:
@@ -10,25 +20,51 @@ resources:
         title: Turner Services
         theme: dark
         color: slate
+        background:
+          image: https://picsum.photos/seed/turnerservices/2560/1440?grayscale
+          saturate: 100
+          brightness: 40
+          opacity: 60
+        cardBlur: md
       services.yaml: |
         - Infrastructure:
             - Proxmox:
                 href: https://prox.turnerservices.cloud
-                description: Virtualization — load-balanced across 5 hosts
+                description: Virtualization, load-balanced across 5 hosts
                 icon: proxmox.png
+            - UniFi:
+                href: https://10.0.2.1
+                description: Network controller
+                icon: unifi.png
+                widget:
+                  type: unifi
+                  url: https://10.0.2.1
+                  key: "{{HOMEPAGE_VAR_UNIFI_KEY}}"
             - Code Server:
                 href: https://code.turnerservices.cloud
                 description: VS Code in the browser
                 icon: vscode.png
+
         - Apps:
             - Jellyfin:
                 href: https://jellyfin.turnerservices.cloud
                 description: Media server
                 icon: jellyfin.png
+            - Proton:
+                href: https://proton.me
+                description: Mail and Drive
+                icon: proton.png
+            - Signal:
+                href: https://signal.org
+                description: Messaging
+                icon: signal.png
       widgets.yaml: |
         []
       bookmarks.yaml: |
-        []
+        - Personal:
+            - Blog:
+                - abbr: TT
+                  href: https://thadturner.com
 
   - apiVersion: apps/v1
     kind: Deployment
@@ -72,6 +108,9 @@ resources:
                   value: {{ .Values.homepage.host | quote }}
                 - name: LOG_LEVEL
                   value: debug
+              envFrom:
+                - secretRef:
+                    name: homepage-secrets
               volumeMounts:
                 - name: config
                   mountPath: /app/config
