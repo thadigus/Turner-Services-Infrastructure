@@ -119,21 +119,22 @@ def resolve_network_id(
 
 
 def build_dns_record(
-    vm: VmConfig,
+    owner_name: str,
     record: DnsRecordConfig,
     provider: unifi.Provider,
+    default_value: Optional[str] = None,
 ) -> unifi.dns.Record:
     args = {
         "name": record.name,
         "type": record.type,
-        "value": record.value or vm.ip_address,
+        "value": record.value or default_value,
         "enabled": record.enabled,
     }
     for key in ("ttl", "priority", "port", "weight"):
         value = getattr(record, key)
         if value is not None:
             args[key] = value
-    resource_name = clean_resource_name(f"{vm.name}-{record.name}-{record.type}")
+    resource_name = clean_resource_name(f"{owner_name}-{record.name}-{record.type}")
     return unifi.dns.Record(
         resource_name,
         opts=pulumi.ResourceOptions(provider=provider),
@@ -171,11 +172,14 @@ def build_dhcp_reservation(
 
 
 def build_unifi_resources(server_list: ServerListConfig) -> Dict[str, List[pulumi.Resource]]:
-    required = any(needs_unifi(vm) for vm in server_list.virtual_machines)
+    required = bool(server_list.dns_records) or any(needs_unifi(vm) for vm in server_list.virtual_machines)
     provider = build_provider(required)
     resources_by_vm: Dict[str, List[pulumi.Resource]] = {}
     if provider is None:
         return resources_by_vm
+
+    for record in server_list.dns_records:
+        build_dns_record("static-dns", record, provider)
 
     for vm in server_list.virtual_machines:
         if not needs_unifi(vm):
@@ -185,7 +189,7 @@ def build_unifi_resources(server_list: ServerListConfig) -> Dict[str, List[pulum
         if reservation is not None:
             resources.append(reservation)
         for record in vm.dns_records:
-            resources.append(build_dns_record(vm, record, provider))
+            resources.append(build_dns_record(vm.name, record, provider, vm.ip_address))
         resources_by_vm[vm.name] = resources
 
     return resources_by_vm

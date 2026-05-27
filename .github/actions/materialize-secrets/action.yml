@@ -98,7 +98,9 @@ runs:
           fetch ts-code-server-password   note > "$RUNNER_TEMP/code-server-password.txt"
           chmod 600 "$RUNNER_TEMP/cloudflare-dns01-token.txt" "$RUNNER_TEMP/code-server-password.txt"
 
-          gha_secret_env TS_UNIFI_API_KEY "$(fetch ts-unifi-apikey password)"
+          if [ "$KUBE_ENV" = prod ]; then
+            gha_secret_env TS_UNIFI_API_KEY "$(fetch ts-unifi-apikey password)"
+          fi
 
           {
             echo "TS_KUBECONFIG_DIR=$RUNNER_TEMP/kubeconfigs"

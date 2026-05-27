@@ -9,3 +9,4 @@ rpi-pxeboot/scripts/.work/
 **/*_id_rsa
 **/*_id_ed25519
 **/*_id_ecdsa
+deployment/pulumi-proxmox/core

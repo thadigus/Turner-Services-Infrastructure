@@ -16,6 +16,7 @@ Releases are labeled `layer=platform` or `layer=apps` — use `--layer` to scope
 - `turner-services-sensitive-repo/k8s-vars.yml`: `k8s_kube_test_vip_address` set (required for kube-vip on test).
 - `turner-services-sensitive-repo/cloudflare-dns01-token.txt`: Cloudflare token, scope `Zone:Zone:Read` + `Zone:DNS:Edit` on `turnerservices.cloud`.
 - `turner-services-sensitive-repo/code-server-password.txt`: code-server login password.
+- `TS_UNIFI_API_KEY`: required for prod homepage rendering; test falls back to a placeholder when unset.
 
 ## Commands
 
@@ -32,10 +33,10 @@ scripts/run-k8s-app.sh apply --env test --layer apps
 
 ## DNS
 
-Internal hostnames are served by UniFi. After ingress allocates an LB IP, add the A record manually:
+Internal hostnames are served by UniFi. Static vanity records for prod ingress-backed services are managed by the Pulumi UniFi stack in `turner-services-sensitive-repo/server-list-prod.yml` and should point at the prod ingress-nginx LoadBalancer IP:
 
 ```
-kubectl --context ts-main-<env> -n platform get svc ingress-nginx-controller
+kubectl --context ts-main-prod -n platform get svc ingress-nginx-controller
 ```
 
 Cloudflare zone is only used for ACME `_acme-challenge.*` TXT records.
@@ -45,7 +46,7 @@ Cloudflare zone is only used for ACME `_acme-challenge.*` TXT records.
 1. New file in `values/<name>.yaml.gotmpl` — a `resources:` list of plain manifests.
 2. New release in `helmfile.yaml` with `chart: ./raw`, `labels: { layer: apps }`.
 3. Per-env values in `environments/{test,prod}.yaml.gotmpl`.
-4. `apply --env test`, add UniFi A record, validate, then `apply --env prod`.
+4. `apply --env test`, add/update Pulumi UniFi DNS records when a prod vanity hostname is needed, validate, then `apply --env prod`.
 
 ## CI
 

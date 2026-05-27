@@ -1,0 +1,68 @@
+{{- $externalServices := index .Values "externalServices" | default list }}
+{{- if $externalServices }}
+resources:
+{{- range $externalServices }}
+  {{- $servicePort := index . "servicePort" | default 80 }}
+  {{- $portName := index . "portName" | default "http" }}
+  {{- $backendProtocol := index . "backendProtocol" | default "HTTP" | upper }}
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: {{ .name | quote }}
+      namespace: apps
+    spec:
+      ports:
+        - name: {{ $portName | quote }}
+          port: {{ $servicePort }}
+          protocol: TCP
+          targetPort: {{ .upstreamPort }}
+
+  - apiVersion: discovery.k8s.io/v1
+    kind: EndpointSlice
+    metadata:
+      name: {{ .name | quote }}
+      namespace: apps
+      labels:
+        kubernetes.io/service-name: {{ .name | quote }}
+    addressType: IPv4
+    ports:
+      - name: {{ $portName | quote }}
+        port: {{ .upstreamPort }}
+        protocol: TCP
+    endpoints:
+      - addresses:
+          - {{ .upstreamIp | quote }}
+
+  - apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: {{ .name | quote }}
+      namespace: apps
+      annotations:
+        cert-manager.io/cluster-issuer: letsencrypt-prod
+        nginx.ingress.kubernetes.io/proxy-body-size: "0"
+        nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+        nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+        {{- if eq $backendProtocol "HTTPS" }}
+        nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+        nginx.ingress.kubernetes.io/proxy-ssl-verify: "off"
+        {{- end }}
+    spec:
+      ingressClassName: nginx
+      tls:
+        - hosts:
+            - {{ .host | quote }}
+          secretName: {{ printf "%s-tls" .name | quote }}
+      rules:
+        - host: {{ .host | quote }}
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: {{ .name | quote }}
+                    port:
+                      number: {{ $servicePort }}
+{{- end }}
+{{- end }}

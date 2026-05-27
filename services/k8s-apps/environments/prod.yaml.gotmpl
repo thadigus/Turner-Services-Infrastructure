@@ -38,3 +38,20 @@ proxmoxLb:
 
 homepage:
   host: home.turnerservices.cloud
+
+externalServices:
+  - name: synology1
+    host: synology1.turnerservices.cloud
+    upstreamIp: 10.0.2.6
+    upstreamPort: 5001
+    backendProtocol: HTTPS
+  - name: synology2
+    host: synology2.turnerservices.cloud
+    upstreamIp: 10.0.11.2
+    upstreamPort: 5001
+    backendProtocol: HTTPS
+  - name: jellyfin
+    host: jellyfin.turnerservices.cloud
+    upstreamIp: 10.0.3.52
+    upstreamPort: 8096
+    backendProtocol: HTTP

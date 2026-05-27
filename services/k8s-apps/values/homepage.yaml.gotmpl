@@ -1,6 +1,5 @@
 {{- if .Values.homepage }}
 resources:
-  # Secret populated from env so homepage's widget env-var substitutions can resolve at runtime.
   - apiVersion: v1
     kind: Secret
     metadata:
@@ -8,7 +7,11 @@ resources:
       namespace: apps
     type: Opaque
     stringData:
+      {{- if eq .Environment.Name "prod" }}
       HOMEPAGE_VAR_UNIFI_KEY: {{ requiredEnv "TS_UNIFI_API_KEY" | quote }}
+      {{- else }}
+      HOMEPAGE_VAR_UNIFI_KEY: {{ env "TS_UNIFI_API_KEY" | default "test-placeholder" | quote }}
+      {{- end }}
 
   - apiVersion: v1
     kind: ConfigMap
@@ -40,10 +43,14 @@ resources:
                   type: unifi
                   url: https://10.0.2.1
                   key: "{{ `{{HOMEPAGE_VAR_UNIFI_KEY}}` }}"
-            - Code Server:
-                href: https://code.turnerservices.cloud
-                description: VS Code in the browser
-                icon: vscode.png
+            - Synology 1:
+                href: https://synology1.turnerservices.cloud
+                description: Primary NAS management
+                icon: synology.png
+            - Synology 2:
+                href: https://synology2.turnerservices.cloud
+                description: Secondary NAS management
+                icon: synology.png
 
         - Proton:
             - Mail:
@@ -68,14 +75,14 @@ resources:
                 icon: proton-drive.png
 
         - Apps:
+            - Code Server:
+                href: https://code.turnerservices.cloud
+                description: VS Code in the browser
+                icon: vscode.png
             - Jellyfin:
                 href: https://jellyfin.turnerservices.cloud
                 description: Media server
                 icon: jellyfin.png
-            - Signal:
-                href: https://signal.org
-                description: Messaging
-                icon: signal.png
 
         - Personal:
             - Thadigus:
@@ -106,14 +113,10 @@ resources:
           labels:
             app.kubernetes.io/name: homepage
           annotations:
-            # initContainer seeds the writable emptyDir at pod start, so a ConfigMap edit
-            # alone doesn't propagate. Tying this to GITHUB_SHA (or a local timestamp)
-            # forces a pod roll on every push and local apply, while drift-correction
-            # cron runs with the same SHA stay no-op.
+            # Roll pods when rendered config changes.
             rollout-trigger: {{ env "GITHUB_SHA" | default (now | date "20060102150405") | quote }}
         spec:
-          # ConfigMap mounts are read-only; homepage writes logs to /app/config/logs.
-          # Seed config into an emptyDir so the dir stays writable at runtime.
+          # Homepage writes under /app/config, so seed a writable emptyDir.
           initContainers:
             - name: seed-config
               image: busybox:1.37
@@ -141,8 +144,7 @@ resources:
               volumeMounts:
                 - name: config
                   mountPath: /app/config
-              # TCP probes — HTTP probes get 500'd by HOMEPAGE_ALLOWED_HOSTS because
-              # kubelet's Host header doesn't match the configured allow-list.
+              # TCP avoids HOMEPAGE_ALLOWED_HOSTS Host-header checks.
               readinessProbe:
                 tcpSocket:
                   port: http

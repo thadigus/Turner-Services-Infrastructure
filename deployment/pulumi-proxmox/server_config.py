@@ -56,6 +56,7 @@ class ServerListConfig:
     virtual_machines: List[VmConfig]
     dns_domain: Optional[str] = None
     unifi_networks: Dict[int, str] = field(default_factory=dict)
+    dns_records: List[DnsRecordConfig] = field(default_factory=list)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -358,6 +359,9 @@ def validate_server_list(config: ServerListConfig) -> None:
         for record in vm.dns_records:
             if record.type in {"A", "AAAA"} and not record.value:
                 raise ValueError(f"DNS record {record.name} for VM '{vm.name}' needs an IP/value.")
+    for record in config.dns_records:
+        if record.type in {"A", "AAAA"} and not record.value:
+            raise ValueError(f"Top-level DNS record {record.name} needs a value.")
 
 
 def load_server_list(path: Path, stack: Optional[str] = None) -> ServerListConfig:
@@ -369,12 +373,14 @@ def load_server_list(path: Path, stack: Optional[str] = None) -> ServerListConfi
     stack_name = stack or pulumi.get_stack()
     dns_domain = parse_optional_string(data.get("dns_domain") or data.get("domain"))
     unifi_networks = parse_unifi_networks(data.get("unifi_networks"))
+    dns_records = parse_dns_records(data, None, dns_domain)
     vms = [parse_vm(vm, stack_name, dns_domain, unifi_networks) for vm in vms_raw]
     parsed = ServerListConfig(
         template_node=parse_optional_string(data.get("template_node")),
         virtual_machines=vms,
         dns_domain=dns_domain,
         unifi_networks=unifi_networks,
+        dns_records=dns_records,
     )
     validate_server_list(parsed)
     return parsed

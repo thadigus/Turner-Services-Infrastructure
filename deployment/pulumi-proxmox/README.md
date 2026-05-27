@@ -162,6 +162,7 @@ Top-level keys:
 - `template_node`: Proxmox node where templates live
 - `dns_domain`: optional default domain used when a VM sets `auto_dns: true`
 - `unifi_networks`: optional map of VLAN ID to UniFi network name or ID for DHCP reservations
+- `dns_records`: optional top-level UniFi static DNS records not tied to a VM
 - `virtual_machines`: list of VM definitions
 
 VM fields (common):
@@ -208,6 +209,11 @@ dns_domain: turnerservices.cloud
 unifi_networks:
   3: Servers
 
+dns_records:
+  - name: app-alias.turnerservices.cloud
+    type: A
+    value: 10.0.x.xx
+
 virtual_machines:
   - name: app-01
     template_name: ubuntu-base-image
@@ -216,7 +222,7 @@ virtual_machines:
     cpu_count: 2
     ram_amount: 4096
     vlan: 3
-    ip_address: 10.0.3.80
+    ip_address: 10.0.x.xx
     auto_dns: true
     dns_records:
       - name: app.turnerservices.cloud

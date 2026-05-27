@@ -63,7 +63,6 @@ export TS_TURNERADMIN_SSH_PRIVKEY="${SECRETS_DIR}/ssh/turneradmin_id_rsa"
 export TS_TURNERANS_SVC_SSH_PRIVKEY="${SECRETS_DIR}/ssh/turnerans_svc_id_rsa"
 
 export TS_KUBECONFIG_DIR="${SECRETS_DIR}/kubeconfigs"
-export KUBECONFIG="${SECRETS_DIR}/kubeconfigs/ts-main-test.conf:${SECRETS_DIR}/kubeconfigs/ts-main-prod.conf"
 
 export TS_CF_DNS01_TOKEN_FILE="${SECRETS_DIR}/cloudflare-dns01-token.txt"
 export TS_CODE_SERVER_PASSWORD_FILE="${SECRETS_DIR}/code-server-password.txt"

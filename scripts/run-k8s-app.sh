@@ -4,16 +4,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 K8S_APPS_DIR="${REPO_ROOT}/services/k8s-apps"
+LOCAL_SECRETS_ENV="${REPO_ROOT}/.secrets/env.sh"
 
-if [[ -z "${TS_KUBECONFIG_DIR:-}" ]]; then
-  if [[ -f "${REPO_ROOT}/.secrets/env.sh" ]]; then
-    # shellcheck disable=SC1091
-    source "${REPO_ROOT}/.secrets/env.sh"
-  else
-    echo "Error: TS_* env vars unset and ${REPO_ROOT}/.secrets/env.sh missing." >&2
-    echo "Run scripts/bootstrap-secrets.sh (after pass-cli login)." >&2
-    exit 1
-  fi
+if [[ -f "${LOCAL_SECRETS_ENV}" ]]; then
+  # shellcheck disable=SC1091
+  source "${LOCAL_SECRETS_ENV}"
+elif [[ -z "${TS_KUBECONFIG_DIR:-}" ]]; then
+  echo "Error: TS_* env vars unset and ${LOCAL_SECRETS_ENV} missing." >&2
+  echo "Run scripts/bootstrap-secrets.sh (after pass-cli login)." >&2
+  exit 1
 fi
 
 LOCAL_PATH_PROVISIONER_VERSION="${LOCAL_PATH_PROVISIONER_VERSION:-v0.0.30}"
@@ -67,10 +66,13 @@ case "${ENV_NAME}" in test|prod) ;; *) die "--env must be 'test' or 'prod'";; es
 
 CONTEXT="ts-main-${ENV_NAME}"
 
-if [[ -z "${KUBECONFIG:-}" ]] || [[ "${KUBECONFIG}" != *"${CONTEXT}.conf"* ]]; then
+# Avoid merging test/prod kubeconfigs; their authinfo names collide.
+if [[ -n "${TS_KUBECONFIG_DIR:-}" ]]; then
   export KUBECONFIG="${TS_KUBECONFIG_DIR}/${CONTEXT}.conf"
 fi
-[[ -f "${KUBECONFIG%%:*}" ]] || die "kubeconfig not found at ${KUBECONFIG%%:*}"
+[[ -n "${KUBECONFIG:-}" ]] || die "KUBECONFIG is unset and TS_KUBECONFIG_DIR is unavailable"
+[[ "${KUBECONFIG}" != *:* ]] || die "KUBECONFIG must resolve to one target file for this script, got a multi-file value"
+[[ -f "${KUBECONFIG}" ]] || die "kubeconfig not found at ${KUBECONFIG}"
 
 bootstrap() {
   echo "==> Bootstrapping ${CONTEXT}"
@@ -133,12 +135,17 @@ run_helmfile() {
   helmfile "${args[@]}" "$@"
 }
 
+check_cluster_auth() {
+  kubectl --context "${CONTEXT}" get --raw /version >/dev/null 2>&1 \
+    || die "Kubernetes auth check failed for ${CONTEXT} using KUBECONFIG=${KUBECONFIG}. Re-run scripts/bootstrap-secrets.sh if the kubeconfig is stale."
+}
+
+check_cluster_auth
+
 case "${SUBCMD}" in
   bootstrap) bootstrap ;;
   diff)      run_helmfile diff ;;
-  # --skip-diff-on-install lets apply work on a fresh cluster where some
-  # releases reference CRDs that don't exist yet (cluster-issuer-le before
-  # cert-manager has installed the CRDs in the same run).
+  # Fresh clusters may not have CRDs before cert-manager installs.
   apply)     run_helmfile apply --skip-diff-on-install ;;
   sync)      run_helmfile sync ;;
   destroy)   run_helmfile destroy ;;
