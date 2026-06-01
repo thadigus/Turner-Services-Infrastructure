@@ -1,0 +1,26 @@
+{% set privilege_map = {"read_write": "rw", "read_only": "ro"} -%}
+{% set squash_map = {"no_mapping": "root", "map_root_to_admin": "admin", "map_root_to_guest": "guest", "map_all_to_admin": "all_admin", "map_all_to_guest": "all_guest"} -%}
+{% set ns = namespace(entries=[]) -%}
+{% for rule in synology_nfs_share.nfs.rules -%}
+{% for client_ref in rule.clients | default([]) -%}
+{% set clients = synology_nfs.client_groups[client_ref] if synology_nfs.client_groups[client_ref] is defined else [client_ref] -%}
+{% for client in clients -%}
+{% set entry = {
+  "client": client,
+  "privilege": privilege_map[rule.privilege | default("read_only")],
+  "root_squash": squash_map[rule.squash | default("no_mapping")],
+  "async": (not (rule.sync | default(true) | bool)),
+  "insecure": (not (rule.secure | default(true) | bool)),
+  "crossmnt": (rule.crossmnt | default(false) | bool),
+  "security_flavor": {
+    "sys": true,
+    "kerberos": false,
+    "kerberos_integrity": false,
+    "kerberos_privacy": false
+  }
+} -%}
+{% set ns.entries = ns.entries + [entry] -%}
+{% endfor -%}
+{% endfor -%}
+{% endfor -%}
+{{ ns.entries | to_json }}

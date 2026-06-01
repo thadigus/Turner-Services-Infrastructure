@@ -1,0 +1,170 @@
+---
+- name: Validate Synology NFS manifest is loaded
+  ansible.builtin.assert:
+    that:
+      - synology_nfs is mapping
+      - synology_nfs.managed_hosts is mapping
+      - synology_nfs.shares is sequence
+      - synology_nfs.client_groups is mapping
+    fail_msg: "synology_nfs manifest is missing required keys."
+
+- name: Resolve host NAS policy
+  ansible.builtin.set_fact:
+    synology_nfs_host_policy: "{{ synology_nfs.managed_hosts[inventory_hostname] | default({}) }}"
+
+- name: Validate this NAS is declared in the manifest
+  ansible.builtin.assert:
+    that:
+      - synology_nfs_host_policy | length > 0
+    fail_msg: "{{ inventory_hostname }} is in the nas inventory group but not synology_nfs.managed_hosts."
+
+- name: Validate share definitions
+  ansible.builtin.assert:
+    that:
+      - item.id | default('') | length > 0
+      - item.name | default('') | length > 0
+      - item.volume | default('') | length > 0
+      - item.hosts is sequence
+      - item.nfs is mapping
+      - not (item.nfs.export | default(true) | bool) or item.nfs.rules is sequence
+    fail_msg: "Invalid Synology share definition: {{ item }}"
+  loop: "{{ synology_nfs.shares }}"
+  loop_control:
+    label: "{{ item.id | default(item.name | default('unknown')) }}"
+
+- name: Validate NFS rule values
+  ansible.builtin.assert:
+    that:
+      - item.1.privilege | default('') in ['read_write', 'read_only']
+      - item.1.squash | default('no_mapping') in ['no_mapping', 'map_root_to_admin', 'map_root_to_guest', 'map_all_to_admin', 'map_all_to_guest']
+      - item.1.clients is sequence
+    fail_msg: "Invalid NFS rule for {{ item.0.name }}: {{ item.1 }}"
+  loop: "{{ synology_nfs.shares | subelements('nfs.rules', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+
+- name: Initialize host-owned share list
+  ansible.builtin.set_fact:
+    synology_nfs_host_shares: []
+
+- name: Resolve host-owned shares
+  ansible.builtin.set_fact:
+    synology_nfs_host_shares: "{{ synology_nfs_host_shares + [item] }}"
+  loop: "{{ synology_nfs.shares }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: inventory_hostname in item.hosts
+
+- name: Enable Synology NFS service
+  ansible.builtin.command:
+    cmd: "{{ synology_nfs_systemctl_bin }} enable {{ synology_nfs_service_name }}"
+  changed_when: false
+  when:
+    - synology_nfs_enable_service | bool
+    - synology_nfs_host_policy.manage_exports | default(false) | bool
+    - not ansible_check_mode
+
+- name: Start Synology NFS service
+  ansible.builtin.command:
+    cmd: "{{ synology_nfs_systemctl_bin }} start {{ synology_nfs_service_name }}"
+  changed_when: false
+  when:
+    - synology_nfs_enable_service | bool
+    - synology_nfs_host_policy.manage_exports | default(false) | bool
+    - not ansible_check_mode
+
+- name: Check shared folder state
+  ansible.builtin.command:
+    cmd: "{{ synology_nfs_synoshare_bin }} --get {{ item.name }}"
+  register: synology_nfs_share_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  loop: "{{ synology_nfs_host_shares }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: synology_nfs_host_policy.create_shared_folders | default(false) | bool
+
+- name: Report missing shared folders in check mode
+  ansible.builtin.debug:
+    msg: "Would create Synology shared folder {{ item.item.name }} at /{{ item.item.volume }}/{{ item.item.name }}"
+  changed_when: true
+  loop: "{{ synology_nfs_share_probe.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when:
+    - ansible_check_mode
+    - item.rc is defined
+    - item.rc != 0
+
+- name: Create missing Synology shared folders
+  ansible.builtin.command:
+    argv:
+      - "{{ synology_nfs_synoshare_bin }}"
+      - --add
+      - "{{ item.item.name }}"
+      - "{{ item.item.description | default(item.item.id) }}"
+      - "/{{ item.item.volume }}/{{ item.item.name }}"
+      - ""
+      - "{{ synology_nfs_admin_group }}"
+      - ""
+      - "0"
+      - "0"
+  changed_when: true
+  loop: "{{ synology_nfs_share_probe.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when:
+    - not ansible_check_mode
+    - item.rc is defined
+    - item.rc != 0
+
+- name: Ensure shared folder Unix permissions
+  ansible.builtin.file:
+    path: "/{{ item.volume }}/{{ item.name }}"
+    owner: "{{ item.unix.owner | default(omit) }}"
+    group: "{{ item.unix.group | default(omit) }}"
+    mode: "{{ item.unix.mode | default(omit) }}"
+    state: directory
+  loop: "{{ synology_nfs_host_shares }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - synology_nfs_host_policy.create_shared_folders | default(false) | bool
+    - item.unix is defined
+
+- name: Manage DSM native NFS permissions
+  ansible.builtin.include_tasks: native-share.yml
+  loop: "{{ synology_nfs_host_shares }}"
+  loop_control:
+    loop_var: synology_nfs_share
+    label: "{{ synology_nfs_share.name }}"
+  when:
+    - synology_nfs_host_policy.manage_exports | default(false) | bool
+    - synology_nfs_share.nfs.export | default(true) | bool
+
+- name: Check for legacy managed NFS exports block
+  ansible.builtin.command:
+    cmd: "grep -F {{ synology_nfs_managed_block_marker | quote }} {{ synology_nfs_exports_file | quote }}"
+  register: synology_nfs_legacy_block_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: synology_nfs_host_policy.manage_exports | default(false) | bool
+
+- name: Remove legacy managed NFS exports block
+  ansible.builtin.blockinfile:
+    path: "{{ synology_nfs_exports_file }}"
+    create: false
+    marker: "# {mark} {{ synology_nfs_managed_block_marker }}"
+    block: ""
+    state: absent
+  notify: Reload Synology NFS exports
+  when:
+    - synology_nfs_host_policy.manage_exports | default(false) | bool
+    - synology_nfs_legacy_block_probe.rc | default(1) == 0
+
+- name: Report NAS policy when exports are unmanaged
+  ansible.builtin.debug:
+    msg: "{{ inventory_hostname }} role={{ synology_nfs_host_policy.role }} is not configured for managed NFS exports."
+  when: not (synology_nfs_host_policy.manage_exports | default(false) | bool)

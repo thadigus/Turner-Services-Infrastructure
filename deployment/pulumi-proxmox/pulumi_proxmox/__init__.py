@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 import pulumi
 import pulumi_proxmoxve as proxmox
+from pulumi_proxmoxve.hardware import mapping as hardware_mapping
 
 import os
 
@@ -18,6 +19,10 @@ from server_config import (
 
 
 _template_cache: Dict[tuple[str, Optional[str]], int] = {}
+
+
+def clean_resource_name(value: str) -> str:
+    return "".join(char.lower() if char.isalnum() else "-" for char in value).strip("-")
 
 
 def build_provider(inventory_path: Optional[Path]) -> proxmox.Provider:
@@ -108,6 +113,45 @@ def build_disks(vm: VmConfig) -> Optional[List[proxmox.vm.VirtualMachineDiskArgs
     return [disk]
 
 
+def build_usb_mappings(
+    server_list: ServerListConfig,
+    provider: proxmox.Provider,
+) -> Dict[str, pulumi.Resource]:
+    mappings: Dict[str, pulumi.Resource] = {}
+    for vm in server_list.virtual_machines:
+        for device in vm.usb_devices:
+            if not device.mapping or not device.host or device.mapping in mappings:
+                continue
+            mappings[device.mapping] = hardware_mapping.Usb(
+                clean_resource_name(f"usb-{device.mapping}"),
+                name=device.mapping,
+                comment=f"{vm.name} USB passthrough",
+                maps=[
+                    hardware_mapping.UsbMapArgs(
+                        id=device.host,
+                        node=vm.prox_node,
+                    )
+                ],
+                opts=pulumi.ResourceOptions(provider=provider),
+            )
+    return mappings
+
+
+def build_usbs(vm: VmConfig) -> Optional[List[proxmox.vm.VirtualMachineUsbArgs]]:
+    if not vm.usb_devices:
+        return None
+    usbs: List[proxmox.vm.VirtualMachineUsbArgs] = []
+    for device in vm.usb_devices:
+        usbs.append(
+            proxmox.vm.VirtualMachineUsbArgs(
+                host=None if device.mapping else device.host,
+                mapping=device.mapping,
+                usb3=device.usb3,
+            )
+        )
+    return usbs
+
+
 def infer_vm_platform_tag(vm: VmConfig) -> str:
     selector = " ".join(
         [
@@ -159,6 +203,10 @@ def build_vm_resource(
     }
     vm_args["cdrom"] = {"interface": "ide3", "file_id": "none"}
 
+    usbs = build_usbs(vm)
+    if usbs:
+        vm_args["usbs"] = usbs
+
     if vm.template_name:
         if vm.storage_location and not vm.storage_plan and vm.disk_amount is None:
             raise ValueError(
@@ -200,12 +248,19 @@ def build_virtual_machines(
     unifi_dependencies: Dict[str, List[pulumi.Resource]],
 ) -> None:
     provider = build_provider(inventory_file)
+    usb_mappings = build_usb_mappings(server_list, provider)
     for vm in server_list.virtual_machines:
         vm_tags = build_vm_tags(stack_environment, vm)
+        dependencies = list(unifi_dependencies.get(vm.name) or [])
+        dependencies.extend(
+            usb_mappings[device.mapping]
+            for device in vm.usb_devices
+            if device.mapping in usb_mappings
+        )
         build_vm_resource(
             vm,
             server_list.template_node,
             provider,
             vm_tags,
-            depends_on=unifi_dependencies.get(vm.name),
+            depends_on=dependencies or None,
         )

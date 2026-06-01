@@ -2,7 +2,6 @@
 
 Web-based VSCodium (code-server) container image with the full Turner Services IaC toolchain (kubectl, helm, helmfile, ansible, pulumi, packer) layered on top of `lscr.io/linuxserver/code-server`.
 
-Deployed by the `code-server` Helm release in `services/k8s-apps/apps/code-server`.
 
 ## Build
 

@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-K8S_APPS_DIR="${REPO_ROOT}/services/k8s-apps"
+K8S_APPS_DIR="${TS_K8S_APPS_DIR:-${REPO_ROOT}/turner-services-sensitive-repo/k8s-apps}"
 LOCAL_SECRETS_ENV="${REPO_ROOT}/.secrets/env.sh"
 
 if [[ -f "${LOCAL_SECRETS_ENV}" ]]; then
@@ -77,57 +77,20 @@ fi
 bootstrap() {
   echo "==> Bootstrapping ${CONTEXT}"
 
-  kubectl --context "${CONTEXT}" apply -f - <<'NS'
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: platform
-  labels:
-    pod-security.kubernetes.io/enforce: baseline
-    pod-security.kubernetes.io/enforce-version: latest
-    pod-security.kubernetes.io/warn: baseline
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: apps
-  labels:
-    pod-security.kubernetes.io/enforce: baseline
-    pod-security.kubernetes.io/enforce-version: latest
-    pod-security.kubernetes.io/warn: baseline
-NS
-
   kubectl --context "${CONTEXT}" apply -f "${LOCAL_PATH_PROVISIONER_URL}"
   kubectl --context "${CONTEXT}" patch storageclass local-path \
     -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}' \
     || true
 
-  local cf_token_file="${TS_CF_DNS01_TOKEN_FILE}"
-  local cs_password_file="${TS_CODE_SERVER_PASSWORD_FILE}"
-
-  if [[ -f "${cf_token_file}" ]]; then
-    if grep -q REPLACE_WITH_CLOUDFLARE_API_TOKEN "${cf_token_file}"; then
-      echo "    !! ${cf_token_file} still has placeholder content"
-    else
-      kubectl --context "${CONTEXT}" -n platform create secret generic cloudflare-api-token \
-        --from-file=api-token="${cf_token_file}" \
-        --dry-run=client -o yaml | kubectl --context "${CONTEXT}" apply -f -
-    fi
+  local bootstrap_hook="${K8S_APPS_DIR}/bootstrap.sh"
+  if [[ -x "${bootstrap_hook}" ]]; then
+    "${bootstrap_hook}" "${CONTEXT}" "${REPO_ROOT}"
   else
-    echo "    !! ${cf_token_file} missing"
-  fi
-
-  if [[ -f "${cs_password_file}" ]]; then
-    kubectl --context "${CONTEXT}" -n apps create secret generic code-server-password \
-      --from-file=password="${cs_password_file}" \
-      --dry-run=client -o yaml | kubectl --context "${CONTEXT}" apply -f -
-  else
-    echo "    !! ${cs_password_file} missing"
+    echo "    !! ${bootstrap_hook} missing or not executable; skipping catalog-specific bootstrap"
   fi
 
   echo "==> Bootstrap complete"
 }
-
 run_helmfile() {
   local args=(-e "${ENV_NAME}" -f "${K8S_APPS_DIR}/helmfile.yaml")
   [[ -n "${LAYER}" ]] && args+=(-l "layer=${LAYER}")

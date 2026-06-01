@@ -1,0 +1,33 @@
+{% for share in synology_nfs.shares -%}
+{% if share.nfs.export | default(true) -%}
+{% set export_clients = [] -%}
+{% for rule in share.nfs.rules -%}
+{% set opts = [] -%}
+{% set _ = opts.append('rw' if rule.privilege | default('read_only') == 'read_write' else 'ro') -%}
+{% set _ = opts.append('sync' if rule.sync | default(true) else 'async') -%}
+{% if rule.secure is defined -%}
+{% set _ = opts.append('secure' if rule.secure else 'insecure') -%}
+{% endif -%}
+{% if rule.subtree_check is defined -%}
+{% set _ = opts.append('subtree_check' if rule.subtree_check else 'no_subtree_check') -%}
+{% endif -%}
+{% if rule.squash | default('map_root_to_guest') == 'no_mapping' -%}
+{% set _ = opts.append('no_root_squash') -%}
+{% elif rule.squash | default('map_root_to_guest') == 'map_all_to_guest' -%}
+{% set _ = opts.append('all_squash') -%}
+{% else -%}
+{% set _ = opts.append('root_squash') -%}
+{% endif -%}
+{% for extra in rule.extra_options | default([]) -%}
+{% set _ = opts.append(extra) -%}
+{% endfor -%}
+{% for client_ref in rule.clients -%}
+{% set clients = synology_nfs.client_groups[client_ref] if synology_nfs.client_groups[client_ref] is defined else [client_ref] -%}
+{% for client in clients -%}
+{% set _ = export_clients.append(client ~ '(' ~ (opts | unique | join(',')) ~ ')') -%}
+{% endfor -%}
+{% endfor -%}
+{% endfor -%}
+{{ '/' ~ share.volume ~ '/' ~ share.name }} {{ export_clients | join(' ') }}
+{% endif -%}
+{% endfor -%}

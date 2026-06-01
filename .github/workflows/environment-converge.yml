@@ -1,18 +1,16 @@
-name: K8S Apps
+name: Environment Converge
 
-# Branch-driven IaC for the Helmfile catalog:
-#   push to non-main  -> apply to test
-#   push to main      -> apply to prod
-#   daily schedule    -> apply to prod (drift correction)
-#   workflow_dispatch -> manual override (env + optional bootstrap)
+# Branch-driven environment convergence.
 
 on:
   push:
     branches: ['**']
     paths:
-      - 'services/k8s-apps/**'
       - 'scripts/run-k8s-app.sh'
-      - '.github/workflows/k8s-apps.yml'
+      - 'services/k8s-apps/raw/**'
+      - 'turner-services-sensitive-repo'
+      - '.github/actions/materialize-secrets/**'
+      - '.github/workflows/environment-converge.yml'
   schedule:
     - cron: '0 14 * * *'  # Daily at 14:00 UTC (1h after base-config-ansible)
   workflow_dispatch:
@@ -30,11 +28,11 @@ on:
         default: false
 
 concurrency:
-  group: k8s-apps
+  group: environment-converge
   cancel-in-progress: false
 
 jobs:
-  apply:
+  converge:
     runs-on: self-hosted
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
@@ -47,15 +45,11 @@ jobs:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
 
-      # Docker's embedded DNS (127.0.0.11) doesn't know turnerservices.cloud
-      # and overrides --dns when the runner attaches a user network. Hard-pin
-      # cluster endpoints in /etc/hosts instead.
-      - name: Pin internal cluster endpoints in /etc/hosts
+      - name: Prepare network resolution
         run: |
-          {
-            echo "10.0.3.5  k8s-control-prod.turnerservices.cloud"
-            echo "10.0.3.118 k8s-test-control-01.turnerservices.cloud"
-          } >> /etc/hosts
+          if [ -f turner-services-sensitive-repo/ci/hosts ]; then
+            cat turner-services-sensitive-repo/ci/hosts >> /etc/hosts
+          fi
 
       - name: Resolve target env
         id: env
@@ -72,20 +66,20 @@ jobs:
             *) echo "Unhandled event ${{ github.event_name }}"; exit 1 ;;
           esac
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          echo "Targeting ts-main-$name"
+          echo "Target environment selected"
 
-      - name: Materialize secrets from Proton Pass
+      - name: Prepare credentials
         uses: ./.github/actions/materialize-secrets
         with:
           proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
-          scope: k8s-apps
+          scope: cluster
           kubeconfig-env: ${{ steps.env.outputs.name }}
 
-      - name: bootstrap
+      - name: Prepare environment
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.bootstrap }}
         run: scripts/run-k8s-app.sh bootstrap --env ${{ steps.env.outputs.name }}
 
-      - name: helmfile apply
+      - name: Converge state
         run: scripts/run-k8s-app.sh apply --env ${{ steps.env.outputs.name }}
 
       # Container ran as root and wrote to the bind-mounted workspace. Hand

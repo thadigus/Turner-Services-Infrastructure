@@ -8,9 +8,9 @@ Home-lab IaC for a Proxmox-backed environment. Everything that runs is described
 - `deployment/` — Pulumi (Proxmox VM provisioning) and base-config Ansible playbooks.
 - `roles/` — Ansible roles applied after provisioning. See **Role file structure** below.
 - `collections/` — Ansible collection requirements.
-- `services/` — Per-workload Ansible playbooks (GitHub runners, K8s cluster bootstrap) and the Helmfile-managed K8s app catalog. See [services/README.md](services/README.md).
+- `services/` — Ansible playbooks, cluster bootstrap helpers, and generic deployment plumbing. Private workload catalogs live in the sensitive submodule. See [services/README.md](services/README.md).
 - `scripts/` — Dispatchers: `run-k8s-app.sh` for Helmfile, etc.
-- `.github/workflows/` — CI: image builds, scheduled base config, scheduled K8s app reconciliation, PR diff for K8s changes.
+- `.github/workflows/` — CI for image builds, base configuration, and environment convergence.
 - `turner-services-sensitive-repo/` — submodule with secrets, kubeconfigs, server lists, SSH keys.
 - `.devcontainer/` — VSCodium dev container based on the `iac-runner` image.
 
@@ -21,7 +21,7 @@ Home-lab IaC for a Proxmox-backed environment. Everything that runs is described
 | VM network identity + Proxmox provisioning | Pulumi (`deployment/pulumi-proxmox`) | Manual workflow dispatch |
 | Base OS config | Ansible (`deployment/base-config-pulumi.yml`) | Daily cron + manual |
 | Workload bootstrap (K8s cluster, runners) | Ansible (`services/<name>/site.yml`) | Manual via `services/run-service-playbook.sh` |
-| K8s app deploys | Helmfile (`services/k8s-apps/`) | Push to non-`main` → test; push to `main` → prod; daily cron → prod |
+| Cluster workload convergence | Helmfile private catalog | Push/manual/scheduled convergence |
 | Container images (devcontainer, in-cluster-dev) | Docker build | Sunday 22:00 UTC + manual |
 | Packer VM images (Ubuntu, RHEL, Windows, Kali) | Packer | Monday 04:30 UTC + manual |
 

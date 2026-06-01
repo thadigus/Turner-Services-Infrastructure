@@ -30,6 +30,13 @@ class DnsRecordConfig:
 
 
 @dataclass(frozen=True)
+class UsbDeviceConfig:
+    host: Optional[str] = None
+    mapping: Optional[str] = None
+    usb3: Optional[bool] = None
+
+
+@dataclass(frozen=True)
 class VmConfig:
     name: str
     prox_node: str
@@ -48,6 +55,7 @@ class VmConfig:
     disk_amount: Optional[int] = None
     disk_interface: str = "scsi0"
     storage_plan: List[StoragePlan] = field(default_factory=list)
+    usb_devices: List[UsbDeviceConfig] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -291,6 +299,34 @@ def parse_disk_amount(raw: Dict[str, Any], storage_plan: List[StoragePlan], vm_n
     return disk_amount
 
 
+def parse_usb_devices(raw: Dict[str, Any]) -> List[UsbDeviceConfig]:
+    usb_raw = raw.get("usb_devices") or raw.get("usb") or raw.get("usbs") or []
+    if isinstance(usb_raw, (str, dict)):
+        usb_raw = [usb_raw]
+    devices: List[UsbDeviceConfig] = []
+    for entry in usb_raw:
+        if isinstance(entry, str):
+            host = parse_optional_string(entry)
+            if host is not None:
+                devices.append(UsbDeviceConfig(host=host))
+            continue
+        if not isinstance(entry, dict):
+            raise ValueError(f"USB device entries must be strings or mappings: {entry}")
+        host = parse_optional_string(entry.get("host") or entry.get("id") or entry.get("vendor_product"))
+        mapping = parse_optional_string(entry.get("mapping"))
+        usb3 = entry.get("usb3")
+        if not host and not mapping:
+            raise ValueError(f"USB device entry must include host/id/vendor_product or mapping: {entry}")
+        devices.append(
+            UsbDeviceConfig(
+                host=host,
+                mapping=mapping,
+                usb3=parse_bool(usb3, False) if usb3 is not None else None,
+            )
+        )
+    return devices
+
+
 def parse_unifi_networks(raw: Any) -> Dict[int, str]:
     if raw is None:
         return {}
@@ -341,6 +377,7 @@ def parse_vm(raw: Dict[str, Any], stack: str, dns_domain: Optional[str], unifi_n
         disk_amount=disk_amount,
         disk_interface=str(raw.get("disk_interface", "scsi0")).strip() or "scsi0",
         storage_plan=storage_plan,
+        usb_devices=parse_usb_devices(raw),
     )
 
 

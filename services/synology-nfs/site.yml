@@ -1,0 +1,16 @@
+---
+- name: Manage Synology NFS shared folders
+  hosts: nas
+  become: true
+  gather_facts: false
+  vars:
+    ansible_user: "{{ synology_nfs_ssh_user | default('turneradmin') }}"
+    ansible_password: "{{ synology_nfs_ssh_password | default(win_turneradmin_passwd) }}"
+    ansible_become_password: "{{ synology_nfs_become_password | default(ansible_password) }}"
+    ansible_remote_tmp: "/tmp/.ansible-{{ ansible_user }}"
+    ansible_python_interpreter: "{{ synology_nfs_python_interpreter | default('/usr/bin/python3.8') }}"
+    ansible_ssh_transfer_method: piped
+  vars_files:
+    - ../../turner-services-sensitive-repo/nas/shares-prod.yml
+  roles:
+    - role: synology-nfs

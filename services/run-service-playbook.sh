@@ -28,7 +28,8 @@ Options:
   -i, --inventory <path>   Inventory file path
                            Default: ${DEFAULT_INVENTORY}
   -l, --list               List discovered services and exit
-      --check              Run ansible-playbook --syntax-check
+      --check              Run ansible-playbook --check for drift preview
+      --syntax-check       Run ansible-playbook --syntax-check only
       --limit <pattern>    Pass --limit to ansible-playbook
   -h, --help               Show this help
 
@@ -76,6 +77,7 @@ select_service_interactive() {
 SERVICE=""
 INVENTORY="${DEFAULT_INVENTORY}"
 CHECK_ONLY=0
+SYNTAX_CHECK=0
 LIST_ONLY=0
 LIMIT_PATTERN=""
 EXTRA_ARGS=()
@@ -96,6 +98,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --check)
       CHECK_ONLY=1
+      shift
+      ;;
+    --syntax-check)
+      SYNTAX_CHECK=1
       shift
       ;;
     --limit)
@@ -157,6 +163,9 @@ CMD+=(--extra-vars "win_turneradmin_passwd=${TS_WIN_TURNERADMIN_PASSWD}")
 CMD+=(--extra-vars "win_turnerans_svc_passwd=${TS_WIN_TURNERANS_SVC_PASSWD}")
 CMD+=(--extra-vars "unifi_api_key=${TS_UNIFI_API_KEY}")
 if (( CHECK_ONLY == 1 )); then
+  CMD+=(--check)
+fi
+if (( SYNTAX_CHECK == 1 )); then
   CMD+=(--syntax-check)
 fi
 if [[ -n "${LIMIT_PATTERN}" ]]; then

@@ -85,7 +85,11 @@ ensure_note_from_file ts-turnerans_svc-ssh-privkey "${SENSITIVE_DIR}/turnerans_s
 ensure_note_from_file ts-main-prod-kubeconfig      "${SENSITIVE_DIR}/kubeconfigs/ts-main-prod.conf"
 ensure_note_from_file ts-main-test-kubeconfig      "${SENSITIVE_DIR}/kubeconfigs/ts-main-test.conf"
 ensure_note_from_file ts-cloudflare-dns01-token    "${SENSITIVE_DIR}/cloudflare-dns01-token.txt"
-ensure_note_from_file ts-code-server-password      "${SENSITIVE_DIR}/code-server-password.txt"
+extra_seed_hook="${SENSITIVE_DIR}/ci/seed-extra-pass-items.sh"
+if [[ -f "${extra_seed_hook}" ]]; then
+  # shellcheck source=/dev/null
+  source "${extra_seed_hook}"
+fi
 
 # Credential items (prompted unless TS_* is exported)
 need_creds=0

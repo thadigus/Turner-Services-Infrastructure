@@ -1,0 +1,48 @@
+---
+- name: Build desired DSM native NFS rules for {{ synology_nfs_share.name }}
+  ansible.builtin.set_fact:
+    synology_nfs_native_desired_rules: "{{ lookup('ansible.builtin.template', 'native-rules.json.j2') | from_json }}"
+
+- name: Load current DSM native NFS rules for {{ synology_nfs_share.name }}
+  ansible.builtin.command:
+    argv:
+      - "{{ synology_nfs_synowebapi_bin }}"
+      - --exec
+      - api=SYNO.Core.FileServ.NFS.SharePrivilege
+      - method=load
+      - version=1
+      - "share_name={{ synology_nfs_share.name | to_json }}"
+  register: synology_nfs_native_load
+  changed_when: false
+  failed_when: not ((synology_nfs_native_load.stdout | from_json).success | default(false) | bool)
+  check_mode: false
+
+- name: Resolve current DSM native NFS rules for {{ synology_nfs_share.name }}
+  ansible.builtin.set_fact:
+    synology_nfs_native_current_rules: "{{ ((synology_nfs_native_load.stdout | from_json).data.rule | default([])) }}"
+
+- name: Report DSM native NFS rule drift for {{ synology_nfs_share.name }}
+  ansible.builtin.debug:
+    msg: "Would update DSM native NFS rules for {{ synology_nfs_share.name }} from {{ synology_nfs_native_current_rules | to_json }} to {{ synology_nfs_native_desired_rules | to_json }}"
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - synology_nfs_native_current_rules != synology_nfs_native_desired_rules
+
+- name: Save DSM native NFS rules for {{ synology_nfs_share.name }}
+  ansible.builtin.command:
+    argv:
+      - "{{ synology_nfs_synowebapi_bin }}"
+      - --exec
+      - api=SYNO.Core.FileServ.NFS.SharePrivilege
+      - method=save
+      - version=1
+      - "share_name={{ synology_nfs_share.name | to_json }}"
+      - "rule={{ synology_nfs_native_desired_rules | to_json }}"
+  register: synology_nfs_native_save
+  changed_when: true
+  failed_when: not ((synology_nfs_native_save.stdout | from_json).success | default(false) | bool)
+  notify: Reload Synology NFS exports
+  when:
+    - not ansible_check_mode
+    - synology_nfs_native_current_rules != synology_nfs_native_desired_rules

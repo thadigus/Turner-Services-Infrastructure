@@ -1,0 +1,11 @@
+---
+synology_nfs_exports_file: /etc/exports
+synology_nfs_managed_block_marker: "TURNER SERVICES MANAGED NFS EXPORTS"
+synology_nfs_synoshare_bin: /usr/syno/sbin/synoshare
+synology_nfs_synowebapi_bin: /usr/syno/bin/synowebapi
+synology_nfs_systemctl_bin: /usr/bin/systemctl
+synology_nfs_exportfs_bin: /usr/sbin/exportfs
+synology_nfs_service_name: nfs-server.service
+synology_nfs_enable_service: true
+synology_nfs_restart_service_on_change: true
+synology_nfs_admin_group: "@administrators"

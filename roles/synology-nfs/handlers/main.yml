@@ -1,0 +1,7 @@
+---
+- name: Reload Synology NFS exports
+  ansible.builtin.command:
+    cmd: "{{ synology_nfs_exportfs_bin }} -ra"
+  changed_when: true
+  listen: Reload Synology NFS exports
+  when: synology_nfs_restart_service_on_change | bool

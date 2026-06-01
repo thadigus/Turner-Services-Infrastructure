@@ -29,9 +29,12 @@ fetch ts-main-prod-kubeconfig         note > "${SECRETS_DIR}/kubeconfigs/ts-main
 fetch ts-main-test-kubeconfig         note > "${SECRETS_DIR}/kubeconfigs/ts-main-test.conf"
 chmod 600 "${SECRETS_DIR}/kubeconfigs/"*.conf
 
-fetch ts-cloudflare-dns01-token       note > "${SECRETS_DIR}/cloudflare-dns01-token.txt"
-fetch ts-code-server-password         note > "${SECRETS_DIR}/code-server-password.txt"
-chmod 600 "${SECRETS_DIR}/cloudflare-dns01-token.txt" "${SECRETS_DIR}/code-server-password.txt"
+local_cluster_hook="${REPO_ROOT}/turner-services-sensitive-repo/ci/materialize-local-cluster-secrets.sh"
+if [[ -x "${local_cluster_hook}" ]]; then
+  "${local_cluster_hook}" "${VAULT}" "${SECRETS_DIR}"
+else
+  echo "Warning: ${local_cluster_hook} missing; skipping cluster-specific local secret files" >&2
+fi
 
 WIN_TURNERADMIN_PASSWD="$(fetch ts-windows-turneradmin password)"
 WIN_TURNERANS_SVC_PASSWD="$(fetch ts-windows-turnerans_svc password)"
@@ -65,7 +68,7 @@ export TS_TURNERANS_SVC_SSH_PRIVKEY="${SECRETS_DIR}/ssh/turnerans_svc_id_rsa"
 export TS_KUBECONFIG_DIR="${SECRETS_DIR}/kubeconfigs"
 
 export TS_CF_DNS01_TOKEN_FILE="${SECRETS_DIR}/cloudflare-dns01-token.txt"
-export TS_CODE_SERVER_PASSWORD_FILE="${SECRETS_DIR}/code-server-password.txt"
+export TS_CODE_SERVER_PASSWORD_FILE="${SECRETS_DIR}/cluster-login-password.txt"
 EOF
 chmod 600 "${SECRETS_DIR}/env.sh"
 
