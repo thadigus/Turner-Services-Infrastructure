@@ -43,6 +43,7 @@ PROXMOX_PACKER_APIKEY="$(fetch ts-proxmox-packer-apitoken password)"
 PROXMOX_VE_ENDPOINT="$(fetch ts-proxmox-packer-apitoken endpoint)"
 UNIFI_API_KEY="$(fetch ts-unifi-apikey password)"
 PULUMI_ACCESS_TOKEN_VALUE="$(fetch ts-pulumi-access-token password)"
+GRAFANA_ADMIN_USER="$(fetch ts-grafana-admin username)"
 
 shq() { printf "%s" "$1" | sed "s/'/'\\\\''/g; s/^/'/; s/$/'/"; }
 
@@ -69,12 +70,19 @@ export TS_KUBECONFIG_DIR="${SECRETS_DIR}/kubeconfigs"
 
 export TS_CF_DNS01_TOKEN_FILE="${SECRETS_DIR}/cloudflare-dns01-token.txt"
 export TS_CODE_SERVER_PASSWORD_FILE="${SECRETS_DIR}/cluster-login-password.txt"
+export TS_IMMICH_DB_PASSWORD_FILE="${SECRETS_DIR}/immich-db-password.txt"
+export TS_NEXTCLOUD_DB_PASSWORD_FILE="${SECRETS_DIR}/nextcloud-db-password.txt"
+export TS_NEXTCLOUD_ADMIN_USER_FILE="${SECRETS_DIR}/nextcloud-admin-user.txt"
+export TS_NEXTCLOUD_ADMIN_PASSWORD_FILE="${SECRETS_DIR}/nextcloud-admin-password.txt"
+export TS_CODER_POSTGRES_PASSWORD_FILE="${SECRETS_DIR}/coder-postgres-password.txt"
+export TS_GRAFANA_ADMIN_PASSWORD_FILE="${SECRETS_DIR}/grafana-admin-password.txt"
+export TS_GRAFANA_ADMIN_USER=$(shq "${GRAFANA_ADMIN_USER}")
 EOF
 chmod 600 "${SECRETS_DIR}/env.sh"
 
 unset WIN_TURNERADMIN_PASSWD WIN_TURNERANS_SVC_PASSWD \
       PROXMOX_PACKER_USER PROXMOX_PACKER_APIKEY PROXMOX_TOKEN_SECRET \
-      UNIFI_API_KEY PULUMI_ACCESS_TOKEN_VALUE
+      UNIFI_API_KEY PULUMI_ACCESS_TOKEN_VALUE GRAFANA_ADMIN_USER
 
 echo "Wrote secrets to ${SECRETS_DIR}"
 echo "Source ${SECRETS_DIR}/env.sh (or open a new shell) to pick up exports."

@@ -7,6 +7,7 @@ umask 077
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SENSITIVE_DIR="${REPO_ROOT}/turner-services-sensitive-repo"
+SECRETS_DIR="${REPO_ROOT}/.secrets"
 VAULT="${VAULT:-Turner-Services-Infra}"
 
 die() { echo "Error: $*" >&2; exit 1; }
@@ -26,7 +27,7 @@ fi
 EXISTING_ITEMS_JSON="$(pass-cli item list "$VAULT" --output json 2>/dev/null || echo '{"items":[]}')"
 
 item_exists() {
-  jq -e --arg t "$1" '.items[] | select(.title==$t)' <<<"$EXISTING_ITEMS_JSON" >/dev/null
+  jq -e --arg t "$1" '.items[] | select(.title==$t or .content.title==$t)' <<<"$EXISTING_ITEMS_JSON" >/dev/null
 }
 
 ensure_note_from_file() {
@@ -43,17 +44,23 @@ ensure_note_from_file() {
 
 ensure_login() {
   local title="$1" username="$2" password="$3"
+  shift 3
   if item_exists "$title"; then
     echo "skip (exists): $title"
     return 0
   fi
   [[ -n "$password" ]] || die "empty password for $title"
   echo "create login:  $title  (username=$username)"
-  pass-cli item create login \
-    --vault-name "$VAULT" \
-    --title "$title" \
-    --username "$username" \
-    --password "$password" >/dev/null
+  local cmd=(pass-cli item create login
+    --vault-name "$VAULT"
+    --title "$title"
+    --username "$username"
+    --password "$password")
+  local url
+  for url in "$@"; do
+    [[ -n "$url" ]] && cmd+=(--url "$url")
+  done
+  "${cmd[@]}" >/dev/null
 }
 
 prompt_secret() {
