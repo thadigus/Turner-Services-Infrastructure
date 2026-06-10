@@ -1,27 +1,28 @@
-name: Run Base Config Across Environment
+name: Base Config
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 13 * * *'  # Daily at 13:00 UTC
+    - cron: "0 13 * * *"
+
+permissions:
+  contents: read
 
 jobs:
   run-base-config:
-    name: Run Base Config (All Pulumi VMs)
+    name: Run Base Config
     runs-on: self-hosted
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
       options: --user root
-    permissions:
-      contents: read
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v6
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
 
-      - name: Materialize secrets from Proton Pass
+      - name: Materialize Ansible secrets
         uses: ./.github/actions/materialize-secrets
         with:
           proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
@@ -39,7 +40,7 @@ jobs:
             --extra-vars "win_turnerans_svc_passwd=$TS_WIN_TURNERANS_SVC_PASSWD" \
             --extra-vars "unifi_api_key=$TS_UNIFI_API_KEY" \
             deployment/base-config-pulumi.yml \
-            --limit 'tag_pulumi:&tag_production'
+            --limit "tag_pulumi:&tag_production"
 
       - name: Restore workspace ownership
         if: always()

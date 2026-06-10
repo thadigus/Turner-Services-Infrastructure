@@ -15,15 +15,13 @@ elif [[ -z "${TS_KUBECONFIG_DIR:-}" ]]; then
   exit 1
 fi
 
-LOCAL_PATH_PROVISIONER_VERSION="${LOCAL_PATH_PROVISIONER_VERSION:-v0.0.30}"
-LOCAL_PATH_PROVISIONER_URL="https://raw.githubusercontent.com/rancher/local-path-provisioner/${LOCAL_PATH_PROVISIONER_VERSION}/deploy/local-path-storage.yaml"
 
 usage() {
   cat <<USAGE
 Usage: scripts/run-k8s-app.sh <subcommand> --env {test|prod} [options]
 
 Subcommands:
-  bootstrap   create namespaces, install local-path-provisioner, load secrets
+  bootstrap   run catalog-specific namespace and secret bootstrap
   diff        helmfile diff
   apply       helmfile apply
   sync        helmfile sync
@@ -31,7 +29,7 @@ Subcommands:
 
 Options:
   -e, --env <test|prod>      Target cluster (required)
-  -l, --layer <platform|apps>  Limit to one release layer
+  -l, --layer <name>           Limit to one scaffold layer, e.g. 1-namespaces
   -h, --help                 Show this help
 USAGE
 }
@@ -62,7 +60,7 @@ esac
 
 [[ -z "${ENV_NAME}" ]] && die "--env is required (test or prod)"
 case "${ENV_NAME}" in test|prod) ;; *) die "--env must be 'test' or 'prod'";; esac
-[[ -n "${LAYER}" ]] && case "${LAYER}" in platform|apps) ;; *) die "--layer must be 'platform' or 'apps'";; esac
+# Any non-empty layer is passed through as a Helmfile label selector.
 
 CONTEXT="ts-main-${ENV_NAME}"
 
@@ -76,11 +74,6 @@ fi
 
 bootstrap() {
   echo "==> Bootstrapping ${CONTEXT}"
-
-  kubectl --context "${CONTEXT}" apply -f "${LOCAL_PATH_PROVISIONER_URL}"
-  kubectl --context "${CONTEXT}" patch storageclass local-path \
-    -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}' \
-    || true
 
   local bootstrap_hook="${K8S_APPS_DIR}/bootstrap.sh"
   if [[ -x "${bootstrap_hook}" ]]; then
@@ -98,6 +91,17 @@ run_helmfile() {
   helmfile "${args[@]}" "$@"
 }
 
+sync_namespaces() {
+  local args=(-e "${ENV_NAME}" -f "${K8S_APPS_DIR}/helmfile.yaml" -l layer=1-namespaces)
+  echo "==> helmfile ${args[*]} sync"
+  helmfile "${args[@]}" sync
+}
+
+prepare_for_converge() {
+  sync_namespaces
+  bootstrap
+}
+
 check_cluster_auth() {
   kubectl --context "${CONTEXT}" get --raw /version >/dev/null 2>&1 \
     || die "Kubernetes auth check failed for ${CONTEXT} using KUBECONFIG=${KUBECONFIG}. Re-run scripts/bootstrap-secrets.sh if the kubeconfig is stale."
@@ -109,7 +113,13 @@ case "${SUBCMD}" in
   bootstrap) bootstrap ;;
   diff)      run_helmfile diff ;;
   # Fresh clusters may not have CRDs before cert-manager installs.
-  apply)     run_helmfile apply --skip-diff-on-install ;;
-  sync)      run_helmfile sync ;;
+  apply)
+    prepare_for_converge
+    run_helmfile apply --skip-diff-on-install
+    ;;
+  sync)
+    prepare_for_converge
+    run_helmfile sync
+    ;;
   destroy)   run_helmfile destroy ;;
 esac

@@ -9,7 +9,8 @@
   ],
   "containerEnv": {
     "PULUMI_STACK": "ts-proxmox-test",
-    "TS_SERVER_LIST_PATH": "/workspaces/Turner-Services-Infrastructure/turner-services-sensitive-repo/server-list-test.yml"
+    "TS_SERVER_LIST_PATH": "/workspaces/Turner-Services-Infrastructure/turner-services-sensitive-repo/server-list-test.yml",
+    "KUBECONFIG": "/workspaces/Turner-Services-Infrastructure/.secrets/kubeconfigs/ts-main-prod.conf"
   },
   "mounts": [
     "source=ts-proton-pass-cli,target=/home/turneradmin/.local/share/proton-pass-cli,type=volume"

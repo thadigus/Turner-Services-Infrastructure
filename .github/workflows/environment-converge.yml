@@ -1,46 +1,90 @@
 name: Environment Converge
 
-# Branch-driven environment convergence.
-
 on:
   push:
-    branches: ['**']
+    branches:
+      - "**"
     paths:
-      - 'scripts/run-k8s-app.sh'
-      - 'services/k8s-apps/raw/**'
-      - 'turner-services-sensitive-repo'
-      - '.github/actions/materialize-secrets/**'
-      - '.github/workflows/environment-converge.yml'
+      - ".github/actions/materialize-secrets/**"
+      - ".github/scripts/**"
+      - ".github/workflows/environment-converge.yml"
+      - "scripts/run-k8s-app.sh"
+      - "services/k8s-apps/raw/**"
+      - "turner-services-sensitive-repo"
+      - "turner-services-sensitive-repo/**"
+  pull_request:
+    paths:
+      - ".github/actions/materialize-secrets/**"
+      - ".github/scripts/**"
+      - ".github/workflows/environment-converge.yml"
+      - "scripts/run-k8s-app.sh"
+      - "services/k8s-apps/raw/**"
+      - "turner-services-sensitive-repo"
+      - "turner-services-sensitive-repo/**"
   schedule:
-    - cron: '0 14 * * *'  # Daily at 14:00 UTC (1h after base-config-ansible)
+    - cron: "0 14 * * *"
   workflow_dispatch:
     inputs:
       env:
         description: Target cluster
         required: true
         type: choice
-        options: [test, prod]
         default: prod
-      bootstrap:
-        description: Run bootstrap first
-        required: false
-        type: boolean
-        default: false
+        options:
+          - test
+          - prod
 
 concurrency:
   group: environment-converge
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
+env:
+  HELMFILE_PATH: turner-services-sensitive-repo/k8s-apps/helmfile.yaml
+
 jobs:
-  converge:
+  validate:
+    name: Validate Helmfile
     runs-on: self-hosted
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
       options: --user root
-    permissions:
-      contents: read
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.ACCESS_TOKEN }}
+          submodules: recursive
+
+      - name: Render desired stack
+        run: |
+          set -euo pipefail
+          for env in test prod; do
+            echo "==> Desired releases for ${env}"
+            helmfile -e "${env}" -f "$HELMFILE_PATH" list
+
+            echo "==> Rendering ${env}"
+            helmfile -e "${env}" -f "$HELMFILE_PATH" template >"/tmp/k8s-apps-${env}.yaml"
+            test -s "/tmp/k8s-apps-${env}.yaml"
+          done
+
+      - name: Restore workspace ownership
+        if: always()
+        run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
+
+  converge:
+    name: Converge Cluster
+    needs: validate
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --user root
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
@@ -51,39 +95,55 @@ jobs:
             cat turner-services-sensitive-repo/ci/hosts >> /etc/hosts
           fi
 
-      - name: Resolve target env
+      - name: Resolve target environment
         id: env
         run: |
           case "${{ github.event_name }}" in
-            schedule)          name=prod ;;
+            schedule|push) name=prod ;;
             workflow_dispatch) name="${{ inputs.env }}" ;;
-            push)
-              if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-                name=prod
-              else
-                name=test
-              fi ;;
-            *) echo "Unhandled event ${{ github.event_name }}"; exit 1 ;;
+            *) echo "Unhandled event: ${{ github.event_name }}" >&2; exit 1 ;;
           esac
-          echo "name=$name" >> "$GITHUB_OUTPUT"
-          echo "Target environment selected"
 
-      - name: Prepare credentials
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          echo "Target environment: ${name}"
+
+      - name: Materialize cluster secrets
         uses: ./.github/actions/materialize-secrets
         with:
           proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
           scope: cluster
           kubeconfig-env: ${{ steps.env.outputs.name }}
 
-      - name: Prepare environment
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.bootstrap }}
-        run: scripts/run-k8s-app.sh bootstrap --env ${{ steps.env.outputs.name }}
-
-      - name: Converge state
+      - name: Apply desired state
         run: scripts/run-k8s-app.sh apply --env ${{ steps.env.outputs.name }}
 
-      # Container ran as root and wrote to the bind-mounted workspace. Hand
-      # ownership back to the runner host user so the next checkout works.
+      - name: Verify Helm release set
+        env:
+          TARGET_ENV: ${{ steps.env.outputs.name }}
+        run: |
+          set -euo pipefail
+          context="ts-main-${TARGET_ENV}"
+
+          helmfile -e "$TARGET_ENV" -f "$HELMFILE_PATH" list --output json >/tmp/desired-releases.json
+          helm --kube-context "$context" list -A --output json >/tmp/live-releases.json
+          .github/scripts/verify-helm-release-set.py /tmp/desired-releases.json /tmp/live-releases.json
+
+      - name: Verify pod health
+        env:
+          TARGET_ENV: ${{ steps.env.outputs.name }}
+        run: |
+          set -euo pipefail
+          context="ts-main-${TARGET_ENV}"
+          non_running=$(kubectl --context "$context" get pods -A --field-selector=status.phase!=Running --no-headers)
+
+          if [ -n "$non_running" ]; then
+            echo "$non_running"
+            echo "Found non-running pods after convergence" >&2
+            exit 1
+          fi
+
+          echo "All pods are running."
+
       - name: Restore workspace ownership
         if: always()
         run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true

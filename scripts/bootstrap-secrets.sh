@@ -21,6 +21,24 @@ fetch() {
     || die "failed to fetch ${item}/${field}"
 }
 
+fetch_single_line() {
+  local item="$1" field="$2" path="$3"
+  fetch "${item}" "${field}" | tr -d '\r\n' > "${path}"
+  chmod 600 "${path}"
+}
+
+ensure_secret_file() {
+  local path="$1" item="$2" field="$3"
+  if [[ ! -s "${path}" ]]; then
+    echo "Materializing missing ${path} from ${item}/${field}"
+    fetch_single_line "${item}" "${field}" "${path}"
+  fi
+  [[ -s "${path}" ]] || die "${path} is missing or empty"
+  if grep -q 'REPLACE_WITH_' "${path}"; then
+    die "${path} still contains placeholder content"
+  fi
+}
+
 fetch ts-turneradmin-ssh-privkey      note > "${SECRETS_DIR}/ssh/turneradmin_id_rsa"
 fetch ts-turnerans_svc-ssh-privkey    note > "${SECRETS_DIR}/ssh/turnerans_svc_id_rsa"
 chmod 600 "${SECRETS_DIR}/ssh/"*_id_rsa
@@ -33,8 +51,11 @@ local_cluster_hook="${REPO_ROOT}/turner-services-sensitive-repo/ci/materialize-l
 if [[ -x "${local_cluster_hook}" ]]; then
   "${local_cluster_hook}" "${VAULT}" "${SECRETS_DIR}"
 else
-  echo "Warning: ${local_cluster_hook} missing; skipping cluster-specific local secret files" >&2
+  echo "Warning: ${local_cluster_hook} missing; materializing required cluster secret files directly" >&2
 fi
+
+ensure_secret_file "${SECRETS_DIR}/cloudflare-dns01-token.txt" ts-cloudflare-dns01-token note
+ensure_secret_file "${SECRETS_DIR}/cluster-login-password.txt" ts-code-server-password note
 
 WIN_TURNERADMIN_PASSWD="$(fetch ts-windows-turneradmin password)"
 WIN_TURNERANS_SVC_PASSWD="$(fetch ts-windows-turnerans_svc password)"

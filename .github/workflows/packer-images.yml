@@ -4,13 +4,18 @@ on:
   workflow_dispatch:
     inputs:
       which:
-        description: Which builds to run
+        description: Image build to run
         required: false
         default: all
         type: choice
-        options: [all, ubuntu, rhel, windows, kali]
+        options:
+          - all
+          - ubuntu
+          - rhel
+          - windows
+          - kali
   schedule:
-    - cron: '30 4 * * 1'
+    - cron: "30 4 * * 1"
 
 jobs:
   download-isos:
@@ -19,44 +24,78 @@ jobs:
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
       options: --user root
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout
+        uses: actions/checkout@v6
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
-      - uses: ./.github/actions/materialize-secrets
+
+      - name: Materialize Packer secrets
+        uses: ./.github/actions/materialize-secrets
         with:
           proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
           scope: packer
-      - run: ansible-playbook --private-key "$TS_TURNERANS_SVC_SSH_PRIVKEY" images/download-isos.yml
+
+      - name: Download ISOs
+        run: ansible-playbook --private-key "$TS_TURNERANS_SVC_SSH_PRIVKEY" images/download-isos.yml
+
       - name: Restore workspace ownership
         if: always()
         run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
 
-  ubuntu-packer-build:
-    name: Ubuntu Packer Build
-    runs-on: self-hosted
+  packer-build:
+    name: Build ${{ matrix.name }} Image
     needs: download-isos
-    if: ${{ github.event_name == 'schedule' || inputs.which == 'all' || inputs.which == 'ubuntu' }}
+    runs-on: self-hosted
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
       options: --user root -v /var/run/docker.sock:/var/run/docker.sock
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: ubuntu
+            name: Ubuntu
+            script: images/build-scripts/ubuntu-packer-build-rack.sh
+          - target: rhel
+            name: RHEL
+            script: images/build-scripts/rhel-packer-build-rack.sh
+          - target: windows
+            name: Windows
+            script: images/build-scripts/windows-packer-build-rack.sh
+          - target: kali
+            name: Kali
+            script: images/build-scripts/kali-packer-build-rack.sh
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout
+        uses: actions/checkout@v6
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
-      - uses: ./.github/actions/materialize-secrets
+
+      - name: Materialize Packer secrets
+        if: ${{ github.event_name == 'schedule' || inputs.which == 'all' || inputs.which == matrix.target }}
+        uses: ./.github/actions/materialize-secrets
         with:
           proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
           scope: packer
-      - name: Packer build (host-network sibling)
+
+      - name: Run Packer build
+        if: ${{ github.event_name == 'schedule' || inputs.which == 'all' || inputs.which == matrix.target }}
         run: |
+          set -euo pipefail
           host_work_root=$(docker inspect "$(cat /etc/hostname)" --format '{{range .Mounts}}{{if eq .Destination "/__w"}}{{.Source}}{{end}}{{end}}')
           host_workspace="${host_work_root}${GITHUB_WORKSPACE#/__w}"
           host_temp="${host_work_root}${RUNNER_TEMP#/__w}"
+
           docker run --rm \
-            --network host --user root \
+            --network host \
+            --user root \
             -v "$host_workspace":"$GITHUB_WORKSPACE" \
             -v "$host_temp":"$RUNNER_TEMP" \
             -w "$GITHUB_WORKSPACE" \
@@ -67,124 +106,8 @@ jobs:
             -e TS_WIN_TURNERADMIN_PASSWD \
             -e TS_TURNERANS_SVC_SSH_PRIVKEY \
             ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-            bash images/build-scripts/ubuntu-packer-build-rack.sh
-      - name: Restore workspace ownership
-        if: always()
-        run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
+            bash "${{ matrix.script }}"
 
-  rhel-packer-build:
-    name: RHEL Packer Build
-    runs-on: self-hosted
-    needs: download-isos
-    if: ${{ github.event_name == 'schedule' || inputs.which == 'all' || inputs.which == 'rhel' }}
-    container:
-      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
-      options: --user root -v /var/run/docker.sock:/var/run/docker.sock
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          token: ${{ secrets.ACCESS_TOKEN }}
-          submodules: recursive
-      - uses: ./.github/actions/materialize-secrets
-        with:
-          proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
-          scope: packer
-      - name: Packer build (host-network sibling)
-        run: |
-          host_work_root=$(docker inspect "$(cat /etc/hostname)" --format '{{range .Mounts}}{{if eq .Destination "/__w"}}{{.Source}}{{end}}{{end}}')
-          host_workspace="${host_work_root}${GITHUB_WORKSPACE#/__w}"
-          host_temp="${host_work_root}${RUNNER_TEMP#/__w}"
-          docker run --rm \
-            --network host --user root \
-            -v "$host_workspace":"$GITHUB_WORKSPACE" \
-            -v "$host_temp":"$RUNNER_TEMP" \
-            -w "$GITHUB_WORKSPACE" \
-            -e TS_PROXMOX_PACKER_USER \
-            -e TS_PROXMOX_PACKER_APIKEY \
-            -e TS_PROXMOX_TOKEN_SECRET \
-            -e TS_WIN_TURNERANS_SVC_PASSWD \
-            -e TS_WIN_TURNERADMIN_PASSWD \
-            -e TS_TURNERANS_SVC_SSH_PRIVKEY \
-            ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-            bash images/build-scripts/rhel-packer-build-rack.sh
-      - name: Restore workspace ownership
-        if: always()
-        run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
-
-  windows-packer-build:
-    name: Windows Packer Build
-    runs-on: self-hosted
-    needs: download-isos
-    if: ${{ github.event_name == 'schedule' || inputs.which == 'all' || inputs.which == 'windows' }}
-    container:
-      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
-      options: --user root -v /var/run/docker.sock:/var/run/docker.sock
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          token: ${{ secrets.ACCESS_TOKEN }}
-          submodules: recursive
-      - uses: ./.github/actions/materialize-secrets
-        with:
-          proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
-          scope: packer
-      - name: Packer build (host-network sibling)
-        run: |
-          host_work_root=$(docker inspect "$(cat /etc/hostname)" --format '{{range .Mounts}}{{if eq .Destination "/__w"}}{{.Source}}{{end}}{{end}}')
-          host_workspace="${host_work_root}${GITHUB_WORKSPACE#/__w}"
-          host_temp="${host_work_root}${RUNNER_TEMP#/__w}"
-          docker run --rm \
-            --network host --user root \
-            -v "$host_workspace":"$GITHUB_WORKSPACE" \
-            -v "$host_temp":"$RUNNER_TEMP" \
-            -w "$GITHUB_WORKSPACE" \
-            -e TS_PROXMOX_PACKER_USER \
-            -e TS_PROXMOX_PACKER_APIKEY \
-            -e TS_PROXMOX_TOKEN_SECRET \
-            -e TS_WIN_TURNERANS_SVC_PASSWD \
-            -e TS_WIN_TURNERADMIN_PASSWD \
-            -e TS_TURNERANS_SVC_SSH_PRIVKEY \
-            ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-            bash images/build-scripts/windows-packer-build-rack.sh
-      - name: Restore workspace ownership
-        if: always()
-        run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true
-
-  kali-packer-build:
-    name: Kali Packer Build
-    runs-on: self-hosted
-    needs: download-isos
-    if: ${{ github.event_name == 'schedule' || inputs.which == 'all' || inputs.which == 'kali' }}
-    container:
-      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
-      options: --user root -v /var/run/docker.sock:/var/run/docker.sock
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          token: ${{ secrets.ACCESS_TOKEN }}
-          submodules: recursive
-      - uses: ./.github/actions/materialize-secrets
-        with:
-          proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
-          scope: packer
-      - name: Packer build (host-network sibling)
-        run: |
-          host_work_root=$(docker inspect "$(cat /etc/hostname)" --format '{{range .Mounts}}{{if eq .Destination "/__w"}}{{.Source}}{{end}}{{end}}')
-          host_workspace="${host_work_root}${GITHUB_WORKSPACE#/__w}"
-          host_temp="${host_work_root}${RUNNER_TEMP#/__w}"
-          docker run --rm \
-            --network host --user root \
-            -v "$host_workspace":"$GITHUB_WORKSPACE" \
-            -v "$host_temp":"$RUNNER_TEMP" \
-            -w "$GITHUB_WORKSPACE" \
-            -e TS_PROXMOX_PACKER_USER \
-            -e TS_PROXMOX_PACKER_APIKEY \
-            -e TS_PROXMOX_TOKEN_SECRET \
-            -e TS_WIN_TURNERANS_SVC_PASSWD \
-            -e TS_WIN_TURNERADMIN_PASSWD \
-            -e TS_TURNERANS_SVC_SSH_PRIVKEY \
-            ghcr.io/thadigus/turner-services-infrastructure:devcontainer \
-            bash images/build-scripts/kali-packer-build-rack.sh
       - name: Restore workspace ownership
         if: always()
         run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true

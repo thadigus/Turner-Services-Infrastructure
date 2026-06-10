@@ -1,36 +1,37 @@
-name: Deploy Proxmox Prod (Pulumi)
+name: Proxmox Prod Pulumi
 
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  deploy-proxmox-prod:
+  deploy:
     name: Deploy Proxmox Prod
     runs-on: self-hosted
     container:
       image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
       options: --user root
-    permissions:
-      contents: read
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v6
         with:
           token: ${{ secrets.ACCESS_TOKEN }}
           submodules: recursive
 
-      - name: Materialize secrets from Proton Pass
+      - name: Materialize Ansible secrets
         uses: ./.github/actions/materialize-secrets
         with:
           proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
           scope: ansible
 
-      - name: Pulumi Up (production)
+      - name: Run Pulumi up
+        working-directory: deployment/pulumi-proxmox
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
           PULUMI_BACKEND_URL: ${{ secrets.PULUMI_BACKEND_URL }}
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
-        working-directory: deployment/pulumi-proxmox
         run: |
           export PATH="/home/turneradmin/.pulumi/bin:${PATH}"
           bash ./run-pulumi-up.sh --prod -u
