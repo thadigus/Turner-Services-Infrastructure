@@ -17,6 +17,7 @@
           - curl
           - gpg
           - containerd
+          - nfs-common
         state: present
         update_cache: true
 
@@ -628,6 +629,17 @@
       failed_when: k8s_control_taint.stdout != ""
       delegate_to: "{{ k8s_first_control_host }}"
       loop: "{{ k8s_expected_control_hosts }}"
+
+    - name: Approve pending kubelet serving certificate requests
+      ansible.builtin.shell:
+        cmd: |
+          kubectl --kubeconfig /etc/kubernetes/admin.conf get csr --no-headers \
+            | awk '$3 == "kubernetes.io/kubelet-serving" && $6 == "Pending" { print $1 }' \
+            | xargs -r kubectl --kubeconfig /etc/kubernetes/admin.conf certificate approve
+      args:
+        executable: /bin/bash
+      changed_when: false
+      delegate_to: "{{ k8s_first_control_host }}"
 
     - name: Ensure local kubeconfig directory exists
       ansible.builtin.file:
