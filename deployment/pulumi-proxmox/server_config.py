@@ -46,6 +46,7 @@ class VmConfig:
     start_on_boot: bool
     vm_state: str
     mac_address: Optional[str] = None
+    dhcp_mac_address: Optional[str] = None
     template_name: Optional[str] = None
     vm_type: Optional[str] = None
     vlan: Optional[int] = None
@@ -351,7 +352,8 @@ def parse_vm(raw: Dict[str, Any], stack: str, dns_domain: Optional[str], unifi_n
     vlan = parse_vlan(raw.get("vlan"))
     ip_address = parse_optional_string(raw.get("ip_address") or raw.get("fixed_ip"))
     explicit_mac_address = normalize_mac_address(raw.get("mac_address"))
-    mac_address = explicit_mac_address or (generate_mac_address(stack, name) if ip_address else None)
+    dhcp_mac_address = normalize_mac_address(raw.get("dhcp_mac_address") or raw.get("reservation_mac_address"))
+    mac_address = explicit_mac_address or (generate_mac_address(stack, name) if ip_address and dhcp_mac_address is None else None)
     dns_records = parse_dns_records(raw, ip_address, dns_domain)
     unifi_network = parse_optional_string(
         raw.get("unifi_network_id") or raw.get("unifi_network") or raw.get("network_id")
@@ -371,6 +373,7 @@ def parse_vm(raw: Dict[str, Any], stack: str, dns_domain: Optional[str], unifi_n
         vm_type=parse_optional_string(raw.get("vm_type") or raw.get("os_type")),
         vlan=vlan,
         mac_address=mac_address,
+        dhcp_mac_address=dhcp_mac_address,
         ip_address=ip_address,
         dns_records=dns_records,
         unifi_network=unifi_network,
@@ -385,10 +388,12 @@ def validate_server_list(config: ServerListConfig) -> None:
     macs: Dict[str, str] = {}
     ips: Dict[str, str] = {}
     for vm in config.virtual_machines:
-        if vm.mac_address:
-            if vm.mac_address in macs:
-                raise ValueError(f"Duplicate MAC address {vm.mac_address} on {vm.name} and {macs[vm.mac_address]}")
-            macs[vm.mac_address] = vm.name
+        for mac_address in {vm.mac_address, vm.dhcp_mac_address}:
+            if mac_address is None:
+                continue
+            if mac_address in macs:
+                raise ValueError(f"Duplicate MAC address {mac_address} on {vm.name} and {macs[mac_address]}")
+            macs[mac_address] = vm.name
         if vm.ip_address:
             if vm.ip_address in ips:
                 raise ValueError(f"Duplicate IP address {vm.ip_address} on {vm.name} and {ips[vm.ip_address]}")

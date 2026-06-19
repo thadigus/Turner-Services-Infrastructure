@@ -151,11 +151,12 @@ def build_dhcp_reservation(
 
     site = pulumi.Config("unifi").get("site")
     network_id = resolve_network_id(provider, site, vm.unifi_network)
-    if not vm.mac_address:
-        raise ValueError(f"VM '{vm.name}' needs a MAC address for its UniFi DHCP reservation.")
+    reservation_mac = vm.dhcp_mac_address or vm.mac_address
+    if not reservation_mac:
+        raise ValueError(f"VM {vm.name!r} needs a MAC address for its UniFi DHCP reservation.")
 
     args = {
-        "mac": vm.mac_address,
+        "mac": reservation_mac,
         "name": vm.name,
         "fixed_ip": vm.ip_address,
         "allow_existing": True,

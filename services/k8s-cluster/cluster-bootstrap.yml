@@ -226,7 +226,9 @@
     - ../../turner-services-sensitive-repo/k8s-vars.yml
   vars:
     k8s_control_hosts: "{{ query('ansible.builtin.inventory_hostnames', k8s_control_host_pattern) | sort }}"
-    k8s_first_control_host: "{{ k8s_control_hosts | first }}"
+    k8s_first_control_host: "{{ k8s_bootstrap_primary_control_host | default(k8s_control_hosts | first, true) }}"
+    k8s_join_api_endpoint: "{{ k8s_bootstrap_join_endpoint | default(k8s_kube_control_endpoint, true) }}"
+    k8s_join_api_host: "{{ k8s_join_api_endpoint | regex_replace(':.*$', '') }}"
     k8s_cert_sans: >-
       {{
         (
@@ -457,7 +459,7 @@
 
     - name: Wait for control plane VIP to accept connections from joining nodes
       ansible.builtin.wait_for:
-        host: "{{ k8s_kube_vip_address | default(hostvars[k8s_first_control_host].ansible_host) }}"
+        host: "{{ k8s_join_api_host }}"
         port: 6443
         timeout: 300
       when:
@@ -504,7 +506,7 @@
           kind: JoinConfiguration
           discovery:
             bootstrapToken:
-              apiServerEndpoint: "{{ k8s_kube_control_endpoint }}"
+              apiServerEndpoint: "{{ k8s_join_api_endpoint }}"
               token: "{{ k8s_bootstrap_token }}"
               caCertHashes:
                 - "{{ k8s_ca_cert_hash }}"
@@ -538,7 +540,10 @@
   vars_files:
     - ../../turner-services-sensitive-repo/k8s-vars.yml
   vars:
-    k8s_first_control_host: "{{ query('ansible.builtin.inventory_hostnames', k8s_control_host_pattern) | sort | first }}"
+    k8s_control_hosts: "{{ query('ansible.builtin.inventory_hostnames', k8s_control_host_pattern) | sort }}"
+    k8s_first_control_host: "{{ k8s_bootstrap_primary_control_host | default(k8s_control_hosts | first, true) }}"
+    k8s_join_api_endpoint: "{{ k8s_bootstrap_join_endpoint | default(k8s_kube_control_endpoint, true) }}"
+    k8s_join_api_host: "{{ k8s_join_api_endpoint | regex_replace(':.*$', '') }}"
   tasks:
     - name: Check whether this worker has joined the cluster
       ansible.builtin.stat:
@@ -591,7 +596,8 @@
   vars_files:
     - ../../turner-services-sensitive-repo/k8s-vars.yml
   vars:
-    k8s_first_control_host: "{{ query('ansible.builtin.inventory_hostnames', k8s_control_host_pattern) | sort | first }}"
+    k8s_control_hosts: "{{ query('ansible.builtin.inventory_hostnames', k8s_control_host_pattern) | sort }}"
+    k8s_first_control_host: "{{ k8s_bootstrap_primary_control_host | default(k8s_control_hosts | first, true) }}"
     k8s_expected_control_hosts: "{{ query('ansible.builtin.inventory_hostnames', k8s_control_host_pattern) | sort }}"
     k8s_expected_worker_hosts: "{{ query('ansible.builtin.inventory_hostnames', k8s_worker_host_pattern) | sort }}"
     k8s_config_local_path: "../../turner-services-sensitive-repo/kubeconfigs"

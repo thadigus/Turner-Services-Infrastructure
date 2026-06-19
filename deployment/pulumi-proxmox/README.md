@@ -174,7 +174,8 @@ VM fields (common):
 - CPU model is enforced to `x86-64-v3` for deployed VMs
 - `ram_amount` (MB, default 512)
 - `vlan` (optional)
-- `mac_address` (optional) - if omitted on a VM with `ip_address`, Pulumi deterministically creates one from the stack and VM name; VMs without `ip_address` keep provider/default MAC behavior
+- `mac_address` (optional) - sets the Proxmox NIC MAC. If omitted on a VM with `ip_address` and no `dhcp_mac_address`, Pulumi deterministically creates one from the stack and VM name.
+- `dhcp_mac_address` or `reservation_mac_address` (optional) - MAC used only for the UniFi DHCP reservation; useful for existing VMs where Pulumi should not touch the NIC.
 - `ip_address` or `fixed_ip` (optional) - enables a UniFi DHCP reservation for this VM
 - `dns_name`, `dns_names`, or `dns_records` (optional) - creates UniFi static DNS records
 - `auto_dns` (optional) - creates `<name>.<dns_domain>` as an A record pointing at `ip_address`
@@ -232,10 +233,10 @@ virtual_machines:
         expand_by: 20G
 ```
 
-For that VM Pulumi creates `unifi:iam/user:User` first, using the VM MAC and
-`fixed_ip`, then creates any `unifi:dns/record:Record` entries, and finally
-creates the Proxmox VM with the same MAC address. Explicit `mac_address` values
-are preserved for existing VMs.
+For that VM Pulumi creates `unifi:iam/user:User` first, using `dhcp_mac_address`
+when present or the VM NIC MAC otherwise, then creates any `unifi:dns/record:Record`
+entries. New VMs can use `mac_address` to set the Proxmox NIC; existing VMs can
+use `dhcp_mac_address` to reserve their current MAC without changing the VM.
 
 ### Disk Size Validation
 

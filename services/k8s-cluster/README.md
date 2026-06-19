@@ -90,3 +90,18 @@ Optional environment variables:
 | `K8S_CHANNEL_VERSION` | `1.35` | apt repo channel for kubelet/kubeadm/kubectl. |
 | `K8S_PAUSE_IMAGE` | `registry.k8s.io/pause:3.10` | containerd sandbox image. |
 | `K8S_KUBE_VIP_VERSION` | `v0.8.7` | kube-vip image tag pinned on control nodes. |
+
+### Recovery bootstrap overrides
+
+When the sorted first control-plane host is unavailable or intentionally being rebuilt,
+run the bootstrap playbook with an explicit healthy source control node and join endpoint:
+
+```bash
+services/run-service-playbook.sh --service k8s-cluster/production \
+  --limit k8s-control-02:k8s-control-03 -- \
+  -e k8s_bootstrap_primary_control_host=k8s-control-03 \
+  -e k8s_bootstrap_join_endpoint=10.0.3.121:6443
+```
+
+`k8s_bootstrap_primary_control_host` controls where token/cert material and verification commands run.
+`k8s_bootstrap_join_endpoint` lets new members join through a known-good API server when the kube-vip endpoint is not yet available.

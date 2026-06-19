@@ -204,8 +204,13 @@ for target in "${targets[@]}"; do
   fi
 
   if [[ "${MODE}" == "up" ]]; then
-    limit_expr="tag_pulumi:&tag_${environment}"
-    echo "Running Ansible base-config for ${target}..."
+    if [[ -z "${changed_host_limit}" ]]; then
+      echo "Skipping Ansible base-config for ${target}; no VMs were created, updated, or replaced."
+      continue
+    fi
+
+    limit_expr="tag_pulumi:&tag_${environment}:&${changed_host_limit}"
+    echo "Running Ansible base-config for changed ${target} VMs..."
     echo "Using inventory: ${ANSIBLE_INVENTORY}"
     echo "Using limit: ${limit_expr}"
     ANSIBLE_CONFIG="${REPO_ROOT}/ansible.cfg" \
