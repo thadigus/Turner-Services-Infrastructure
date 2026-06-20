@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "**"
+    # Empty commits do not satisfy this workflow's path filter.
     paths:
       - ".github/actions/materialize-secrets/**"
       - ".github/scripts/**"
