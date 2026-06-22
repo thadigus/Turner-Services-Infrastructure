@@ -4,6 +4,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+LOCAL_SECRETS_ENV="${REPO_ROOT}/.secrets/env.sh"
+
+if [[ -f "${LOCAL_SECRETS_ENV}" ]]; then
+  # shellcheck disable=SC1090
+  source "${LOCAL_SECRETS_ENV}"
+fi
 
 MODE="preview"
 TARGET_MODE=""

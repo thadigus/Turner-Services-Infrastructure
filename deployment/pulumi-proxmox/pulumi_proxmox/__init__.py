@@ -235,7 +235,13 @@ def build_vm_resource(
 
     opts = pulumi.ResourceOptions(
         provider=provider,
-        ignore_changes=["disks[0].speed"],
+        ignore_changes=[
+            "disks[0].speed",
+            "ipv4Addresses",
+            "ipv6Addresses",
+            "networkInterfaceNames",
+            "started",
+        ],
         depends_on=depends_on,
     )
     return proxmox.vm.VirtualMachine(vm.name, opts=opts, **vm_args)

@@ -133,6 +133,19 @@
     - synology_nfs_host_policy.create_shared_folders | default(false) | bool
     - item.unix is defined
 
+- name: Ensure shared folder subdirectories
+  ansible.builtin.file:
+    path: "/{{ item.0.volume }}/{{ item.0.name }}/{{ item.1.path }}"
+    owner: "{{ item.1.owner | default(item.0.unix.owner | default(omit)) }}"
+    group: "{{ item.1.group | default(item.0.unix.group | default(omit)) }}"
+    mode: "{{ item.1.mode | default(item.0.unix.mode | default(omit)) }}"
+    state: directory
+  loop: "{{ synology_nfs_host_shares | subelements('directories', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.name }}/{{ item.1.path }}"
+  when:
+    - synology_nfs_host_policy.create_shared_folders | default(false) | bool
+
 - name: Manage DSM native NFS permissions
   ansible.builtin.include_tasks: native-share.yml
   loop: "{{ synology_nfs_host_shares }}"
