@@ -32,3 +32,21 @@ Runs the OS-appropriate base-config role against all Proxmox VMs tagged
 ```bash
 ansible-playbook -i turner-services-sensitive-repo/inventories/ansible-inv-rack.proxmox.yml deployment/base-config-pulumi.yml
 ```
+
+### proxmox-host-config.yml
+
+Configures Proxmox VE host-level settings that are outside VM provisioning. It
+enforces home-lab apt repository policy by disabling enterprise repositories
+and enabling `pve-no-subscription`. It also configures Proxmox node
+Wake-on-LAN metadata and keeps WoL enabled on selected physical NICs.
+
+For Optiplex hosts (`prox2`-`prox4`), Proxmox can wake powered-off nodes from
+the web UI/API once `wakeonlan` is configured. The 1 GbE NIC is used for wake
+packets; production traffic can still prefer the 10 GbE bond member after boot.
+For Dell hosts (`prox5`/`prox6`), iDRAC Redfish endpoints are recorded in
+inventory for out-of-band power automation.
+
+```bash
+ansible-playbook -i turner-services-sensitive-repo/inventories/network.yml deployment/proxmox-host-config.yml --limit prox2,prox3,prox4,prox6
+```
+

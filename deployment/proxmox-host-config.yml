@@ -1,0 +1,7 @@
+---
+- name: Configure Proxmox VE hosts
+  hosts: proxmox_hosts
+  become: true
+  gather_facts: true
+  roles:
+    - role: proxmox-host

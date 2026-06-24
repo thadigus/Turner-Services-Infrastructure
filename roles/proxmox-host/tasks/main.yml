@@ -1,0 +1,159 @@
+---
+- name: Validate Proxmox host repository channel
+  ansible.builtin.assert:
+    that:
+      - proxmox_host_repository_channel in ["no-subscription", "enterprise"]
+    fail_msg: "proxmox_host_repository_channel must be no-subscription or enterprise."
+
+- name: Check Proxmox enterprise Deb822 source files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ proxmox_host_disable_enterprise_sources }}"
+  register: proxmox_host_enterprise_deb822_sources
+
+- name: Disable Proxmox enterprise Deb822 source files for no-subscription hosts
+  ansible.builtin.lineinfile:
+    path: "{{ item.stat.path }}"
+    regexp: '^Enabled:'
+    line: 'Enabled: no'
+    insertafter: EOF
+  loop: "{{ proxmox_host_enterprise_deb822_sources.results }}"
+  register: proxmox_host_disable_deb822_result
+  when:
+    - proxmox_host_repository_channel == "no-subscription"
+    - item.stat.exists
+
+- name: Check Proxmox legacy enterprise list files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ proxmox_host_legacy_enterprise_lists }}"
+  register: proxmox_host_enterprise_legacy_lists
+
+- name: Disable Proxmox legacy enterprise list entries for no-subscription hosts
+  ansible.builtin.replace:
+    path: "{{ item.stat.path }}"
+    regexp: '^(deb\s+https://enterprise\.proxmox\.com/.*)$'
+    replace: '# \1'
+  loop: "{{ proxmox_host_enterprise_legacy_lists.results }}"
+  register: proxmox_host_disable_legacy_result
+  when:
+    - proxmox_host_repository_channel == "no-subscription"
+    - item.stat.exists
+
+- name: Check for existing active Proxmox VE no-subscription repository
+  ansible.builtin.command:
+    cmd: grep -Eq '^[[:space:]]*deb[[:space:]]+.*download\.proxmox\.com/debian/pve[[:space:]]+.*[[:space:]]pve-no-subscription([[:space:]]|$)' /etc/apt/sources.list
+  register: proxmox_host_existing_no_subscription_repo
+  changed_when: false
+  failed_when: false
+  when: proxmox_host_repository_channel == "no-subscription"
+
+- name: Remove duplicate managed no-subscription source when legacy source exists
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/pve-no-subscription.sources
+    state: absent
+  when:
+    - proxmox_host_repository_channel == "no-subscription"
+    - proxmox_host_existing_no_subscription_repo.rc == 0
+  register: proxmox_host_remove_duplicate_no_subscription_repo
+
+- name: Configure Proxmox VE no-subscription repository when no active source exists
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/pve-no-subscription.sources
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      Types: deb
+      URIs: http://download.proxmox.com/debian/pve
+      Suites: {{ ansible_distribution_release }}
+      Components: pve-no-subscription
+      Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
+  when:
+    - proxmox_host_repository_channel == "no-subscription"
+    - proxmox_host_existing_no_subscription_repo.rc != 0
+  register: proxmox_host_no_subscription_repo
+
+- name: Refresh apt package lists after repository changes
+  ansible.builtin.apt:
+    update_cache: true
+  when:
+    - proxmox_host_manage_apt_update | bool
+    - proxmox_host_no_subscription_repo is changed or
+      proxmox_host_remove_duplicate_no_subscription_repo is changed or
+      proxmox_host_disable_deb822_result is changed or
+      proxmox_host_disable_legacy_result is changed
+
+- name: Build desired Proxmox node wake-on-LAN config
+  ansible.builtin.set_fact:
+    proxmox_host_wol_config: >-
+      {{ proxmox_host_wol_mac }}{% if proxmox_host_wol_bind_interface | length > 0 %},bind-interface={{ proxmox_host_wol_bind_interface }}{% endif %}{% if proxmox_host_wol_broadcast_address | length > 0 %},broadcast-address={{ proxmox_host_wol_broadcast_address }}{% endif %}
+  when: proxmox_host_wol_mac | length > 0
+
+- name: Read current Proxmox node wake-on-LAN config
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - /nodes/{{ inventory_hostname }}/config
+      - --property
+      - wakeonlan
+      - --output-format
+      - json
+  register: proxmox_host_current_wol_config
+  changed_when: false
+  when: proxmox_host_wol_mac | length > 0
+
+- name: Configure Proxmox node wake-on-LAN MAC and sender options
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - set
+      - /nodes/{{ inventory_hostname }}/config
+      - --wakeonlan
+      - "{{ proxmox_host_wol_config }}"
+  when:
+    - proxmox_host_wol_mac | length > 0
+    - (proxmox_host_current_wol_config.stdout | from_json).wakeonlan | default('') != proxmox_host_wol_config
+
+- name: Ensure ethtool is installed for persistent wake-on-LAN setup
+  ansible.builtin.apt:
+    name: ethtool
+    state: present
+  when: proxmox_host_wol_enable_interfaces | length > 0
+
+- name: Install wake-on-LAN persistence service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/proxmox-wol@.service
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Enable Wake-on-LAN for %i
+      Requires=sys-subsystem-net-devices-%i.device
+      After=sys-subsystem-net-devices-%i.device network-pre.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/sbin/ethtool -s %i wol g
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+  register: proxmox_host_wol_service
+  when: proxmox_host_wol_enable_interfaces | length > 0
+
+- name: Reload systemd after wake-on-LAN service changes
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: proxmox_host_wol_service is changed
+
+- name: Enable wake-on-LAN on selected interfaces
+  ansible.builtin.systemd:
+    name: "proxmox-wol@{{ item }}.service"
+    enabled: true
+    state: started
+  loop: "{{ proxmox_host_wol_enable_interfaces }}"
+  when: proxmox_host_wol_enable_interfaces | length > 0
+

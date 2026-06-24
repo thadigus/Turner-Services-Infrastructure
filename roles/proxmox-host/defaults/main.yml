@@ -1,0 +1,14 @@
+---
+proxmox_host_repository_channel: no-subscription
+proxmox_host_manage_apt_update: true
+proxmox_host_disable_enterprise_sources:
+  - /etc/apt/sources.list.d/pve-enterprise.sources
+  - /etc/apt/sources.list.d/pbs-enterprise.sources
+  - /etc/apt/sources.list.d/ceph.sources
+proxmox_host_legacy_enterprise_lists:
+  - /etc/apt/sources.list.d/pve-enterprise.list
+  - /etc/apt/sources.list.d/ceph.list
+proxmox_host_wol_mac: ""
+proxmox_host_wol_bind_interface: ""
+proxmox_host_wol_broadcast_address: ""
+proxmox_host_wol_enable_interfaces: []
