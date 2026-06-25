@@ -1,0 +1,290 @@
+---
+- name: Validate supported operating system
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution == "Debian"
+      - ansible_distribution_major_version | int >= 12
+    fail_msg: "Proxmox Backup Server packages are supported here only on Debian 12+ hosts."
+
+- name: Restore PBS root PAM password for web UI login
+  ansible.builtin.user:
+    name: root
+    password: "{{ proxmox_backup_server_root_password_hash }}"
+    password_lock: false
+    update_password: always
+  no_log: true
+  when: proxmox_backup_server_root_password_hash | default('') | length > 0
+
+- name: Allow root SSH key login and disable root password login on PBS
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^PermitRootLogin'
+    line: 'PermitRootLogin prohibit-password'
+    state: present
+    backup: true
+  notify: Restart SSH on PBS
+
+- name: Disable Proxmox Backup Server enterprise repository for no-subscription installs
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/pbs-enterprise.sources
+    state: absent
+  when: proxmox_backup_server_repository_channel == "no-subscription"
+
+- name: Ensure required APT helpers are installed
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - nfs-common
+    state: present
+    update_cache: true
+
+- name: Resolve Proxmox archive key location
+  ansible.builtin.set_fact:
+    proxmox_backup_server_archive_key_url: >-
+      {{
+        'https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg'
+        if ansible_distribution_release == 'trixie'
+        else 'https://enterprise.proxmox.com/debian/proxmox-release-bookworm.gpg'
+      }}
+    proxmox_backup_server_archive_key_path: >-
+      {{
+        '/usr/share/keyrings/proxmox-archive-keyring.gpg'
+        if ansible_distribution_release == 'trixie'
+        else '/etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg'
+      }}
+
+- name: Validate supported Debian release
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution_release in ['bookworm', 'trixie']
+    fail_msg: "Supported PBS package repositories are configured for Debian bookworm or trixie."
+
+- name: Install Proxmox archive key
+  ansible.builtin.get_url:
+    url: "{{ proxmox_backup_server_archive_key_url }}"
+    dest: "{{ proxmox_backup_server_archive_key_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Configure Proxmox Backup Server no-subscription repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/pbs-no-subscription.sources
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      Types: deb
+      URIs: http://download.proxmox.com/debian/pbs
+      Suites: {{ ansible_distribution_release }}
+      Components: pbs-no-subscription
+      Signed-By: {{ proxmox_backup_server_archive_key_path }}
+  when: proxmox_backup_server_repository_channel == "no-subscription"
+
+- name: Configure Proxmox Backup Server enterprise repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/pbs-enterprise.sources
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      Types: deb
+      URIs: https://enterprise.proxmox.com/debian/pbs
+      Suites: {{ ansible_distribution_release }}
+      Components: pbs-enterprise
+      Signed-By: {{ proxmox_backup_server_archive_key_path }}
+  when: proxmox_backup_server_repository_channel == "enterprise"
+
+- name: Validate repository channel
+  ansible.builtin.assert:
+    that:
+      - proxmox_backup_server_repository_channel in ["no-subscription", "enterprise"]
+    fail_msg: "proxmox_backup_server_repository_channel must be no-subscription or enterprise."
+
+- name: Install Proxmox Backup Server
+  ansible.builtin.apt:
+    name: "{{ proxmox_backup_server_package }}"
+    state: present
+    update_cache: true
+
+
+- name: Ensure PBS datastore NFS mount point exists
+  ansible.builtin.file:
+    path: "{{ proxmox_backup_server_datastore_mount_path }}"
+    state: directory
+  when: proxmox_backup_server_datastore_mount_enabled | bool
+
+- name: Mount PBS datastore NFS export
+  ansible.posix.mount:
+    path: "{{ proxmox_backup_server_datastore_mount_path }}"
+    src: "{{ proxmox_backup_server_datastore_nfs_server }}:{{ proxmox_backup_server_datastore_nfs_export }}"
+    fstype: nfs
+    opts: "{{ proxmox_backup_server_datastore_nfs_options }}"
+    state: mounted
+  when: proxmox_backup_server_datastore_mount_enabled | bool
+
+- name: Validate PBS datastore path is on a mounted filesystem
+  ansible.builtin.command:
+    cmd: "findmnt -T {{ proxmox_backup_server_datastore_mount_path }} --noheadings --output SOURCE,TARGET,FSTYPE"
+  register: proxmox_backup_server_datastore_mount_check
+  changed_when: false
+  check_mode: false
+  when: proxmox_backup_server_datastore_mount_enabled | bool
+
+- name: Ensure datastore parent directory exists
+  ansible.builtin.file:
+    path: "{{ proxmox_backup_server_datastore_path | dirname }}"
+    state: directory
+    owner: backup
+    group: backup
+    mode: "0750"
+  when: >-
+    not (
+      proxmox_backup_server_datastore_mount_enabled | bool
+      and (proxmox_backup_server_datastore_path | dirname) == proxmox_backup_server_datastore_mount_path
+    )
+
+- name: Ensure datastore directory exists
+  ansible.builtin.file:
+    path: "{{ proxmox_backup_server_datastore_path }}"
+    state: directory
+    owner: backup
+    group: backup
+    mode: "0750"
+
+- name: Check configured Proxmox Backup datastores
+  ansible.builtin.command:
+    cmd: proxmox-backup-manager datastore list --output-format json
+  register: proxmox_backup_server_datastore_list
+  changed_when: false
+  check_mode: false
+
+- name: Resolve whether datastore already exists
+  ansible.builtin.set_fact:
+    proxmox_backup_server_datastore_exists: >-
+      {{
+        (proxmox_backup_server_datastore_list.stdout | from_json)
+        | selectattr('name', 'equalto', proxmox_backup_server_datastore_name)
+        | list
+        | length > 0
+      }}
+
+- name: Create Proxmox Backup datastore
+  ansible.builtin.command:
+    cmd: >-
+      proxmox-backup-manager datastore create
+      {{ proxmox_backup_server_datastore_name }}
+      {{ proxmox_backup_server_datastore_path }}
+      --comment {{ proxmox_backup_server_datastore_comment | quote }}
+      --gc-schedule {{ proxmox_backup_server_gc_schedule | quote }}
+  when: not proxmox_backup_server_datastore_exists
+
+- name: Update Proxmox Backup datastore metadata and GC settings
+  ansible.builtin.command:
+    cmd: >-
+      proxmox-backup-manager datastore update
+      {{ proxmox_backup_server_datastore_name }}
+      --comment {{ proxmox_backup_server_datastore_comment | quote }}
+      --gc-schedule {{ proxmox_backup_server_gc_schedule | quote }}
+  changed_when: false
+  when: proxmox_backup_server_datastore_exists
+
+- name: Check configured prune jobs
+  ansible.builtin.command:
+    cmd: proxmox-backup-manager prune-job list --output-format json
+  register: proxmox_backup_server_prune_job_list
+  changed_when: false
+  check_mode: false
+
+- name: Resolve prune job for datastore
+  ansible.builtin.set_fact:
+    proxmox_backup_server_prune_job_id: >-
+      {{
+        (
+          (proxmox_backup_server_prune_job_list.stdout | from_json)
+          | selectattr('store', 'equalto', proxmox_backup_server_datastore_name)
+          | map(attribute='id')
+          | list
+          | first
+        ) | default(proxmox_backup_server_datastore_name, true)
+      }}
+    proxmox_backup_server_prune_job_exists: >-
+      {{
+        (
+          (proxmox_backup_server_prune_job_list.stdout | from_json)
+          | selectattr('store', 'equalto', proxmox_backup_server_datastore_name)
+          | list
+          | length
+        ) > 0
+      }}
+
+- name: Create datastore prune job
+  ansible.builtin.command:
+    cmd: >-
+      proxmox-backup-manager prune-job create
+      {{ proxmox_backup_server_prune_job_id }}
+      --store {{ proxmox_backup_server_datastore_name }}
+      --schedule {{ proxmox_backup_server_prune_schedule | quote }}
+      --keep-daily {{ proxmox_backup_server_keep_daily }}
+      --keep-weekly {{ proxmox_backup_server_keep_weekly }}
+      --keep-monthly {{ proxmox_backup_server_keep_monthly }}
+  when: not proxmox_backup_server_prune_job_exists
+
+- name: Update datastore prune job retention and schedule
+  ansible.builtin.command:
+    cmd: >-
+      proxmox-backup-manager prune-job update
+      {{ proxmox_backup_server_prune_job_id }}
+      --store {{ proxmox_backup_server_datastore_name }}
+      --schedule {{ proxmox_backup_server_prune_schedule | quote }}
+      --keep-daily {{ proxmox_backup_server_keep_daily }}
+      --keep-weekly {{ proxmox_backup_server_keep_weekly }}
+      --keep-monthly {{ proxmox_backup_server_keep_monthly }}
+  changed_when: false
+  when: proxmox_backup_server_prune_job_exists
+
+- name: Check configured verification jobs
+  ansible.builtin.command:
+    cmd: proxmox-backup-manager verify-job list --output-format json
+  register: proxmox_backup_server_verify_job_list
+  changed_when: false
+  check_mode: false
+
+- name: Resolve whether verification job already exists
+  ansible.builtin.set_fact:
+    proxmox_backup_server_verify_job_exists: >-
+      {{
+        (proxmox_backup_server_verify_job_list.stdout | from_json)
+        | selectattr('id', 'equalto', proxmox_backup_server_datastore_name)
+        | list
+        | length > 0
+      }}
+
+- name: Create datastore verification job
+  ansible.builtin.command:
+    cmd: >-
+      proxmox-backup-manager verify-job create
+      {{ proxmox_backup_server_datastore_name }}
+      --store {{ proxmox_backup_server_datastore_name }}
+      --schedule {{ proxmox_backup_server_verify_schedule | quote }}
+  when: not proxmox_backup_server_verify_job_exists
+
+- name: Update datastore verification job schedule
+  ansible.builtin.command:
+    cmd: >-
+      proxmox-backup-manager verify-job update
+      {{ proxmox_backup_server_datastore_name }}
+      --schedule {{ proxmox_backup_server_verify_schedule | quote }}
+  changed_when: false
+  when: proxmox_backup_server_verify_job_exists
+
+- name: Ensure Proxmox Backup services are enabled and running
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - proxmox-backup
+    - proxmox-backup-proxy

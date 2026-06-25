@@ -77,6 +77,11 @@ runs:
           gha_secret_env TS_WIN_TURNERADMIN_PASSWD   "$(fetch ts-windows-turneradmin password)"
           gha_secret_env TS_WIN_TURNERANS_SVC_PASSWD "$(fetch ts-windows-turnerans_svc password)"
           gha_secret_env TS_UNIFI_API_KEY            "$(fetch ts-unifi-apikey password)"
+
+          pbs_hook="turner-services-sensitive-repo/ci/materialize-pbs-answer.sh"
+          if [ -x "$pbs_hook" ]; then
+            VAULT="$VAULT" REPO_ROOT="$GITHUB_WORKSPACE" "$pbs_hook"
+          fi
         fi
 
         if [ "$want_packer" = 1 ]; then

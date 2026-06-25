@@ -7,6 +7,7 @@
 # - Ubuntu Latest LTS
 # - Kali Linux
 # - Windows Server Latest
+# - Proxmox Backup Server
 ---
 - name: Find a reachable Proxmox host
   hosts: optimus_cluster
@@ -64,14 +65,39 @@
         checksum: "sha256:fcf1999799f6642b7d6c6bd79bc1e516be7340b7203fe86c6be3ac21f693f42a"
         dest: "/mnt/pve/NFS-TempStorage/template/iso/kali-linux-installer.iso"
 
-    - name: Download OPNsense ISO
-      get_url:
-        url: "https://pkg.opnsense.org/releases/25.7/OPNsense-25.7-dvd-amd64.iso.bz2"
-        checksum: "sha256:fa4b30df3f5fd7a2b1a1b2bdfaecfe02337ee42f77e2d0ae8a60753ea7eb153e"
-        dest: "/mnt/pve/NFS-TempStorage/template/iso/OPNsense-dvd-amd64.iso.bz2"
+    - name: Fetch Proxmox ISO index
+      ansible.builtin.uri:
+        url: "https://enterprise.proxmox.com/iso/"
+        return_content: true
+      register: proxmox_iso_index
 
-    - name: Decompress OPNsense ISO
-      command: bzip2 -fd /mnt/pve/NFS-TempStorage/template/iso/OPNsense-dvd-amd64.iso.bz2
+    - name: Parse latest Proxmox Backup Server ISO metadata
+      ansible.builtin.set_fact:
+        pbs_iso_matches: >-
+          {{
+            proxmox_iso_index.content
+            | regex_findall('(proxmox-backup-server_[0-9][^<\s]*\.iso)[\s\S]*?SHA256:\s*([a-f0-9]{64})')
+          }}
+
+    - name: Fail if Proxmox Backup Server ISO metadata cannot be parsed
+      ansible.builtin.fail:
+        msg: "Could not find Proxmox Backup Server ISO metadata at https://enterprise.proxmox.com/iso/."
+      when: (pbs_iso_matches | length) == 0
+
+    - name: Select latest Proxmox Backup Server ISO
+      ansible.builtin.set_fact:
+        pbs_iso_name: "{{ pbs_iso_matches[0][0] }}"
+        pbs_iso_checksum: "{{ pbs_iso_matches[0][1] }}"
+
+    - name: Show selected Proxmox Backup Server ISO
+      ansible.builtin.debug:
+        msg: "Downloading {{ pbs_iso_name }} with sha256:{{ pbs_iso_checksum }}"
+
+    - name: Download latest Proxmox Backup Server ISO
+      ansible.builtin.get_url:
+        url: "https://enterprise.proxmox.com/iso/{{ pbs_iso_name }}"
+        checksum: "sha256:{{ pbs_iso_checksum }}"
+        dest: "/mnt/pve/NFS-TempStorage/template/iso/proxmox-backup-server.iso"
 
     - name: Download Windows Server 2025 ISO
       get_url:

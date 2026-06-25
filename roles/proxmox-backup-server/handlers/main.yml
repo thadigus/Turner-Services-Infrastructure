@@ -1,0 +1,11 @@
+---
+- name: Restart Proxmox Backup Proxy
+  ansible.builtin.service:
+    name: proxmox-backup-proxy
+    state: restarted
+
+
+- name: Restart SSH on PBS
+  ansible.builtin.service:
+    name: ssh
+    state: restarted

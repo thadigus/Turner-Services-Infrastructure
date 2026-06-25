@@ -1,0 +1,19 @@
+---
+proxmox_backup_server_package: proxmox-backup-server
+proxmox_backup_server_repository_channel: no-subscription
+proxmox_backup_server_datastore_name: main
+proxmox_backup_server_datastore_path: /mnt/proxmox-backup/main
+proxmox_backup_server_datastore_mount_enabled: true
+proxmox_backup_server_datastore_mount_path: /mnt/proxmox-backup
+proxmox_backup_server_datastore_nfs_server: 10.0.2.6
+proxmox_backup_server_datastore_nfs_export: /volume1/NFS-ProxmoxBackups
+proxmox_backup_server_datastore_nfs_version: "4"
+proxmox_backup_server_datastore_nfs_options: "rw,hard,intr,_netdev,nofail,vers={{ proxmox_backup_server_datastore_nfs_version }}"
+proxmox_backup_server_datastore_comment: "Primary Turner Services PBS datastore"
+proxmox_backup_server_gc_schedule: "daily"
+proxmox_backup_server_prune_schedule: "daily"
+proxmox_backup_server_keep_daily: 14
+proxmox_backup_server_keep_weekly: 8
+proxmox_backup_server_keep_monthly: 12
+proxmox_backup_server_verify_schedule: "Sun 03:00"
+proxmox_backup_server_root_password_hash: ""

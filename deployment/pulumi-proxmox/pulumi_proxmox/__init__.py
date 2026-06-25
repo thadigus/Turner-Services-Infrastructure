@@ -7,9 +7,13 @@ import pulumi
 import pulumi_proxmoxve as proxmox
 from pulumi_proxmoxve.hardware import mapping as hardware_mapping
 
+from .ha_policy import ProxmoxHANodeAffinityPolicy
+
 import os
 
 from server_config import (
+    HAGroupConfig,
+    HAResourceConfig,
     ServerListConfig,
     VmConfig,
     get_config_secret,
@@ -69,11 +73,33 @@ def build_provider(inventory_path: Optional[Path]) -> proxmox.Provider:
     )
 
 
+def resolve_proxmox_api_connection(inventory_path: Optional[Path]) -> tuple[str, bool]:
+    config = pulumi.Config("proxmox")
+    endpoint = get_config_value(config, "endpoint", "url")
+    insecure = config.get_bool("insecure")
+
+    if inventory_path and inventory_path.exists():
+        inventory = load_yaml(inventory_path)
+        endpoint = endpoint or inventory.get("url")
+        if insecure is None and "validate_certs" in inventory:
+            insecure = not bool(inventory.get("validate_certs"))
+
+    if not endpoint:
+        source = f"inventory file {inventory_path}" if inventory_path else "Pulumi config"
+        raise ValueError(f"Missing Proxmox endpoint. Set proxmox:endpoint or ensure {source} has url.")
+
+    return str(endpoint), bool(insecure) if insecure is not None else True
+
+
 def resolve_template_vm_id(
     template_name: str,
     template_node: Optional[str],
     provider: proxmox.Provider,
+    template_vm_ids: Optional[Dict[str, int]] = None,
 ) -> int:
+    if template_vm_ids and template_name in template_vm_ids:
+        return template_vm_ids[template_name]
+
     cache_key = (template_name, template_node)
     if cache_key in _template_cache:
         return _template_cache[cache_key]
@@ -152,6 +178,26 @@ def build_usbs(vm: VmConfig) -> Optional[List[proxmox.vm.VirtualMachineUsbArgs]]
     return usbs
 
 
+def build_network_devices(vm: VmConfig) -> List[proxmox.vm.VirtualMachineNetworkDeviceArgs]:
+    devices: List[proxmox.vm.VirtualMachineNetworkDeviceArgs] = []
+    for device in vm.network_devices:
+        devices.append(
+            proxmox.vm.VirtualMachineNetworkDeviceArgs(
+                bridge=device.bridge,
+                model=device.model,
+                vlan_id=device.vlan,
+                firewall=device.firewall,
+                enabled=device.enabled,
+                disconnected=device.disconnected,
+                mac_address=device.mac_address,
+                mtu=device.mtu,
+                queues=device.queues,
+                trunks=device.trunks,
+            )
+        )
+    return devices
+
+
 def infer_vm_platform_tag(vm: VmConfig) -> str:
     selector = " ".join(
         [
@@ -174,6 +220,7 @@ def build_vm_resource(
     template_node: Optional[str],
     provider: proxmox.Provider,
     vm_tags: List[str],
+    template_vm_ids: Optional[Dict[str, int]] = None,
     depends_on: Optional[List[pulumi.Resource]] = None,
 ) -> Optional[proxmox.vm.VirtualMachine]:
     if vm.vm_state != "present":
@@ -193,15 +240,16 @@ def build_vm_resource(
         "on_boot": vm.start_on_boot,
         "started": True,
         "tags": vm_tags,
-        "network_devices": [
-            {
-                "bridge": "vmbr0",
-                **({"vlan_id": vm.vlan} if vm.vlan is not None else {}),
-                **({"mac_address": vm.mac_address} if vm.mac_address else {}),
-            }
-        ],
+        "network_devices": build_network_devices(vm),
     }
-    vm_args["cdrom"] = {"interface": "ide3", "file_id": "none"}
+    if vm.iso_file:
+        vm_args["cdrom"] = {
+            "interface": vm.cdrom_interface,
+            "file_id": vm.iso_file,
+        }
+        vm_args["boot_orders"] = vm.boot_orders or [vm.disk_interface, vm.cdrom_interface]
+    else:
+        vm_args["cdrom"] = {"interface": "ide3", "file_id": "none"}
 
     usbs = build_usbs(vm)
     if usbs:
@@ -216,7 +264,7 @@ def build_vm_resource(
                 "template datastore."
             )
         clone_args: Dict[str, Any] = {
-            "vm_id": resolve_template_vm_id(vm.template_name, template_node, provider),
+            "vm_id": resolve_template_vm_id(vm.template_name, template_node, provider, template_vm_ids),
         }
         if template_node:
             clone_args["node_name"] = template_node
@@ -247,6 +295,44 @@ def build_vm_resource(
     return proxmox.vm.VirtualMachine(vm.name, opts=opts, **vm_args)
 
 
+
+def build_ha_groups(ha_groups: List[HAGroupConfig]) -> Dict[str, HAGroupConfig]:
+    return {group.name: group for group in ha_groups}
+
+
+def build_ha_resources(
+    ha_resources: List[HAResourceConfig],
+    ha_groups: Dict[str, HAGroupConfig],
+    vm_resources: Dict[str, proxmox.vm.VirtualMachine],
+    endpoint: str,
+    insecure: bool,
+) -> None:
+    for resource in ha_resources:
+        if not resource.group or resource.group not in ha_groups:
+            raise ValueError(f"HA resource {resource.resource_id!r} must reference a node-affinity group")
+
+        group = ha_groups[resource.group]
+        dependencies: List[pulumi.Resource] = []
+        if resource.vm_name and resource.vm_name in vm_resources:
+            dependencies.append(vm_resources[resource.vm_name])
+
+        ProxmoxHANodeAffinityPolicy(
+            clean_resource_name(f"ha-policy-{resource.resource_id}"),
+            endpoint=endpoint,
+            insecure=insecure,
+            resource_id=resource.resource_id,
+            resource_type=resource.resource_type,
+            state=resource.state,
+            max_restart=resource.max_restart,
+            max_relocate=resource.max_relocate,
+            comment=resource.comment,
+            rule_name=group.name,
+            nodes=group.nodes,
+            strict=group.restricted,
+            failback=not group.no_failback,
+            opts=pulumi.ResourceOptions(depends_on=dependencies or None),
+        )
+
 def build_virtual_machines(
     server_list: ServerListConfig,
     inventory_file: Optional[Path],
@@ -255,6 +341,7 @@ def build_virtual_machines(
 ) -> None:
     provider = build_provider(inventory_file)
     usb_mappings = build_usb_mappings(server_list, provider)
+    vm_resources: Dict[str, proxmox.vm.VirtualMachine] = {}
     for vm in server_list.virtual_machines:
         vm_tags = build_vm_tags(stack_environment, vm)
         dependencies = list(unifi_dependencies.get(vm.name) or [])
@@ -263,10 +350,17 @@ def build_virtual_machines(
             for device in vm.usb_devices
             if device.mapping in usb_mappings
         )
-        build_vm_resource(
+        vm_resource = build_vm_resource(
             vm,
             server_list.template_node,
             provider,
             vm_tags,
+            template_vm_ids=server_list.template_vm_ids,
             depends_on=dependencies or None,
         )
+        if vm_resource is not None:
+            vm_resources[vm.name] = vm_resource
+
+    endpoint, insecure = resolve_proxmox_api_connection(inventory_file)
+    ha_groups = build_ha_groups(server_list.ha_groups)
+    build_ha_resources(server_list.ha_resources, ha_groups, vm_resources, endpoint, insecure)

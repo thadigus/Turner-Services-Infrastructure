@@ -57,6 +57,11 @@ fi
 ensure_secret_file "${SECRETS_DIR}/cloudflare-dns01-token.txt" ts-cloudflare-dns01-token note
 ensure_secret_file "${SECRETS_DIR}/cluster-login-password.txt" ts-code-server-password note
 
+pbs_answer_hook="${REPO_ROOT}/turner-services-sensitive-repo/ci/materialize-pbs-answer.sh"
+if [[ -x "${pbs_answer_hook}" ]]; then
+  VAULT="${VAULT}" REPO_ROOT="${REPO_ROOT}" "${pbs_answer_hook}"
+fi
+
 WIN_TURNERADMIN_PASSWD="$(fetch ts-windows-turneradmin password)"
 WIN_TURNERANS_SVC_PASSWD="$(fetch ts-windows-turnerans_svc password)"
 PROXMOX_PACKER_USER="$(fetch ts-proxmox-packer-apitoken username)"
@@ -98,6 +103,7 @@ export TS_NEXTCLOUD_ADMIN_PASSWORD_FILE="${SECRETS_DIR}/nextcloud-admin-password
 export TS_CODER_POSTGRES_PASSWORD_FILE="${SECRETS_DIR}/coder-postgres-password.txt"
 export TS_GRAFANA_ADMIN_PASSWORD_FILE="${SECRETS_DIR}/grafana-admin-password.txt"
 export TS_GRAFANA_ADMIN_USER=$(shq "${GRAFANA_ADMIN_USER}")
+export PBS_AUTOINSTALL_ANSWER_FILE="${REPO_ROOT}/turner-services-sensitive-repo/proxmox-backup-server/answer.toml"
 EOF
 chmod 600 "${SECRETS_DIR}/env.sh"
 

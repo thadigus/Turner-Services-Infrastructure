@@ -1,0 +1,69 @@
+name: ISO Refresh
+
+on:
+  workflow_dispatch:
+    inputs:
+      prepare_pbs_autoinstall:
+        description: Prepare PBS unattended ISO after refreshing source ISO
+        required: false
+        default: true
+        type: boolean
+  schedule:
+    - cron: "17 8 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  refresh-isos:
+    name: Refresh Proxmox ISO Storage
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/thadigus/turner-services-infrastructure:devcontainer
+      options: --user root
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.ACCESS_TOKEN }}
+          submodules: recursive
+
+      - name: Materialize Ansible secrets
+        uses: ./.github/actions/materialize-secrets
+        with:
+          proton-pass-token: ${{ secrets.PROTON_PASS_ACCESS_TOKEN }}
+          scope: ansible
+
+      - name: Refresh official ISOs
+        env:
+          ANSIBLE_CONFIG: ansible.cfg
+        run: |
+          ansible-playbook \
+            -i turner-services-sensitive-repo/inventories/servers.yml \
+            --private-key "$TS_TURNERANS_SVC_SSH_PRIVKEY" \
+            images/download-isos.yml
+
+      - name: Check PBS answer file
+        id: pbs-answer
+        shell: bash
+        run: |
+          if [ -f turner-services-sensitive-repo/proxmox-backup-server/answer.toml ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "PBS answer file missing; skipping unattended ISO preparation."
+          fi
+
+      - name: Prepare PBS unattended ISO
+        if: ${{ steps.pbs-answer.outputs.present == 'true' && (github.event_name == 'schedule' || inputs.prepare_pbs_autoinstall) }}
+        env:
+          ANSIBLE_CONFIG: ansible.cfg
+        run: |
+          ansible-playbook \
+            -i turner-services-sensitive-repo/inventories/servers.yml \
+            --private-key "$TS_TURNERANS_SVC_SSH_PRIVKEY" \
+            images/proxmox-backup-server-autoinstall/prepare-pbs-autoinstall-iso.yml
+
+      - name: Restore workspace ownership
+        if: always()
+        run: chown -R "$(stat -c '%u:%g' /__w)" "$GITHUB_WORKSPACE" || true

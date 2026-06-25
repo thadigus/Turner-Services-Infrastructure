@@ -23,7 +23,7 @@ on:
       - "turner-services-sensitive-repo"
       - "turner-services-sensitive-repo/**"
   schedule:
-    - cron: "0 14 * * *"
+    - cron: "0 14 * * 1"
   workflow_dispatch:
     inputs:
       env:

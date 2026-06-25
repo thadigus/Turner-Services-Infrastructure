@@ -5,6 +5,8 @@
 # List of all servers to create on Proxmox hosts
 ---
 template_node: prox4
+template_vm_ids:
+  ubuntu-base-image: 998
 
 virtual_machines:
   - name: k8s-test-control-01

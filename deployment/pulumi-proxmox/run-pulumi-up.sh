@@ -13,6 +13,7 @@ fi
 
 MODE="preview"
 TARGET_MODE=""
+SKIP_BASE_CONFIG=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -u|--up)
@@ -35,19 +36,24 @@ while [[ $# -gt 0 ]]; do
       TARGET_MODE="both"
       shift
       ;;
+    --skip-base-config)
+      SKIP_BASE_CONFIG=1
+      shift
+      ;;
     -h|--help)
-      echo "Usage: ./run-pulumi-up.sh [--test|--prod|--both] [-u|--up|-d|--destroy]"
-      echo "  default: pulumi preview"
-      echo "  -u:      pulumi up --yes"
-      echo "  -d:      pulumi destroy --yes"
-      echo "  --test:  run only test stack"
-      echo "  --prod:  run only production stack"
-      echo "  --both:  run test and production stacks"
+      echo "Usage: ./run-pulumi-up.sh [--test|--prod|--both] [-u|--up|-d|--destroy] [--skip-base-config]"
+      echo "  default:            pulumi preview"
+      echo "  -u:                 pulumi up --yes"
+      echo "  -d:                 pulumi destroy --yes"
+      echo "  --test:             run only test stack"
+      echo "  --prod:             run only production stack"
+      echo "  --both:             run test and production stacks"
+      echo "  --skip-base-config: skip post-up Ansible base config/reboot"
       exit 0
       ;;
     *)
       echo "Unknown argument: $1" >&2
-      echo "Usage: ./run-pulumi-up.sh [--test|--prod|--both] [-u|--up|-d|--destroy]" >&2
+      echo "Usage: ./run-pulumi-up.sh [--test|--prod|--both] [-u|--up|-d|--destroy] [--skip-base-config]" >&2
       exit 1
       ;;
   esac
@@ -210,6 +216,11 @@ for target in "${targets[@]}"; do
   fi
 
   if [[ "${MODE}" == "up" ]]; then
+    if [[ "${SKIP_BASE_CONFIG}" == "1" ]]; then
+      echo "Skipping Ansible base-config for ${target}; --skip-base-config was provided."
+      continue
+    fi
+
     if [[ -z "${changed_host_limit}" ]]; then
       echo "Skipping Ansible base-config for ${target}; no VMs were created, updated, or replaced."
       continue

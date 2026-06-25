@@ -29,6 +29,10 @@ Home-lab IaC for a Proxmox-backed environment. Everything that runs is described
 
 VM-owned DNS and DHCP reservations are managed by the Pulumi stack in `deployment/pulumi-proxmox`. The server list defines the VM, VLAN, optional IP reservation, and optional DNS records; Pulumi creates UniFi resources before creating the Proxmox VM with the same MAC address. UniFi console connection details live in `turner-services-sensitive-repo/unifi-consoles.yml`.
 
+## Network Planning
+
+- [Proxmox network performance plan](docs/proxmox-network-performance-plan.md) captures the current NIC survey, EdgeSwitch 16 XG considerations, and the target storage/migration network design.
+
 ## Role file structure
 
 - `defaults/` — default variables for the role

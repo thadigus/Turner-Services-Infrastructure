@@ -1,0 +1,21 @@
+---
+- name: Configure Proxmox Backup Server
+  hosts: pbs-primary-*
+  become: true
+  gather_facts: true
+  vars:
+    ansible_host: "{{ proxmox_backup_server_ansible_host | default('10.0.3.146') }}"
+    ansible_user: "{{ proxmox_backup_server_ansible_user | default('turnerans_svc') }}"
+    proxmox_backup_server_answer_file: "{{ playbook_dir }}/../../turner-services-sensitive-repo/proxmox-backup-server/answer.toml"
+    proxmox_backup_server_root_password_hash: >-
+      {{
+        (
+          lookup('ansible.builtin.file', proxmox_backup_server_answer_file, errors='ignore')
+          | regex_search('root-password-hashed\s*=\s*"([^"]+)"', '\1')
+          | default([''], true)
+          | first
+        )
+      }}
+  roles:
+    - role: deploy-turnerans_svc
+    - role: proxmox-backup-server

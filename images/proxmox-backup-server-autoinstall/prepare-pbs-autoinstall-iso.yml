@@ -1,0 +1,141 @@
+---
+- name: Find a reachable Proxmox host
+  hosts: optimus_cluster
+  gather_facts: false
+  tasks:
+    - name: Probe host reachability
+      ansible.builtin.ping:
+      register: prox_probe
+      ignore_errors: true
+      ignore_unreachable: true
+
+- name: Select one reachable host for PBS autoinstall ISO preparation
+  hosts: localhost
+  gather_facts: false
+  vars:
+    cluster_hosts: "{{ groups['optimus_cluster'] | default([]) }}"
+    pbs_answer_file: "{{ lookup('ansible.builtin.env', 'PBS_AUTOINSTALL_ANSWER_FILE') | default(playbook_dir ~ '/../../turner-services-sensitive-repo/proxmox-backup-server/answer.toml', true) }}"
+    pbs_first_boot_file: "{{ lookup('ansible.builtin.env', 'PBS_AUTOINSTALL_FIRST_BOOT_FILE') | default(playbook_dir ~ '/first-boot.sh', true) }}"
+  tasks:
+    - name: Build list of reachable hosts
+      ansible.builtin.set_fact:
+        reachable_optimus_hosts: "{{ (reachable_optimus_hosts | default([])) + [item] }}"
+      loop: "{{ cluster_hosts }}"
+      when:
+        - hostvars[item].prox_probe is defined
+        - hostvars[item].prox_probe.ping is defined
+        - hostvars[item].prox_probe.ping == "pong"
+
+    - name: Fail if no Proxmox host is reachable
+      ansible.builtin.fail:
+        msg: "No reachable hosts found in optimus_cluster."
+      when: (reachable_optimus_hosts | default([]) | length) == 0
+
+    - name: Validate local PBS answer file exists
+      ansible.builtin.stat:
+        path: "{{ pbs_answer_file }}"
+      register: pbs_answer_file_stat
+
+    - name: Fail if PBS answer file is missing
+      ansible.builtin.fail:
+        msg: "PBS answer file not found. Set PBS_AUTOINSTALL_ANSWER_FILE or create {{ pbs_answer_file }}."
+      when: not pbs_answer_file_stat.stat.exists
+
+    - name: Validate local PBS first-boot file exists
+      ansible.builtin.stat:
+        path: "{{ pbs_first_boot_file }}"
+      register: pbs_first_boot_file_stat
+
+    - name: Fail if PBS first-boot file is missing
+      ansible.builtin.fail:
+        msg: "PBS first-boot file not found at {{ pbs_first_boot_file }}."
+      when: not pbs_first_boot_file_stat.stat.exists
+
+    - name: Choose first reachable Proxmox host
+      ansible.builtin.add_host:
+        name: "{{ reachable_optimus_hosts[0] }}"
+        groups: pbs_autoinstall_iso_target
+        pbs_answer_file: "{{ pbs_answer_file }}"
+        pbs_first_boot_file: "{{ pbs_first_boot_file }}"
+
+    - name: Show selected ISO preparation host
+      ansible.builtin.debug:
+        msg: "Using {{ reachable_optimus_hosts[0] }} to prepare PBS autoinstall ISO."
+
+- name: Prepare PBS autoinstall ISO
+  hosts: pbs_autoinstall_iso_target
+  gather_facts: true
+  become: true
+  vars:
+    pbs_source_iso_path: /mnt/pve/NFS-TempStorage/template/iso/proxmox-backup-server.iso
+    pbs_prepared_iso_path: /mnt/pve/NFS-TempStorage/template/iso/proxmox-backup-server-autoinstall.iso
+    pbs_remote_answer_file: /tmp/pbs-answer.toml
+    pbs_remote_first_boot_file: /tmp/pbs-first-boot.sh
+  tasks:
+    - name: Ensure Proxmox auto-install tooling is installed
+      ansible.builtin.apt:
+        name:
+          - proxmox-auto-install-assistant
+          - xorriso
+        state: present
+        update_cache: true
+      when: ansible_os_family == "Debian"
+
+    - name: Validate source PBS ISO exists
+      ansible.builtin.stat:
+        path: "{{ pbs_source_iso_path }}"
+      register: pbs_source_iso_stat
+
+    - name: Fail if source PBS ISO is missing
+      ansible.builtin.fail:
+        msg: "PBS source ISO is missing at {{ pbs_source_iso_path }}. Run images/download-isos.sh first."
+      when: not pbs_source_iso_stat.stat.exists
+
+    - name: Copy PBS answer file to preparation host
+      ansible.builtin.copy:
+        src: "{{ hostvars['localhost'].pbs_answer_file | default(pbs_answer_file) }}"
+        dest: "{{ pbs_remote_answer_file }}"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Copy PBS first-boot hook to preparation host
+      ansible.builtin.copy:
+        src: "{{ hostvars['localhost'].pbs_first_boot_file | default(pbs_first_boot_file) }}"
+        dest: "{{ pbs_remote_first_boot_file }}"
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Validate PBS answer file
+      ansible.builtin.command:
+        cmd: "proxmox-auto-install-assistant validate-answer {{ pbs_remote_answer_file }}"
+      changed_when: false
+
+    - name: Prepare PBS autoinstall ISO
+      ansible.builtin.command:
+        cmd: >-
+          proxmox-auto-install-assistant prepare-iso
+          {{ pbs_source_iso_path }}
+          --fetch-from iso
+          --answer-file {{ pbs_remote_answer_file }}
+          --on-first-boot {{ pbs_remote_first_boot_file }}
+          --output {{ pbs_prepared_iso_path }}
+      register: pbs_prepare_iso
+      changed_when: true
+
+    - name: Validate prepared PBS autoinstall ISO exists
+      ansible.builtin.stat:
+        path: "{{ pbs_prepared_iso_path }}"
+        checksum_algorithm: sha256
+      register: pbs_prepared_iso_stat
+
+    - name: Fail if prepared PBS autoinstall ISO is missing
+      ansible.builtin.fail:
+        msg: "Prepared PBS autoinstall ISO was not created at {{ pbs_prepared_iso_path }}."
+      when: not pbs_prepared_iso_stat.stat.exists
+
+    - name: Show prepared PBS autoinstall ISO checksum
+      ansible.builtin.debug:
+        msg: "Prepared {{ pbs_prepared_iso_path }} sha256:{{ pbs_prepared_iso_stat.stat.checksum }}"

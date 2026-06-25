@@ -1,0 +1,28 @@
+# Proton Pass note template for item: ts-pbs-autoinstall-answer
+# Paste this TOML into the item note field after replacing the password hash
+# and SSH public key placeholders. The materializer writes it to:
+# turner-services-sensitive-repo/proxmox-backup-server/answer.toml
+
+[global]
+keyboard = "en-us"
+country = "us"
+fqdn = "pbs-primary-01.turnerservices.cloud"
+mailto = "admin@turnerservices.cloud"
+timezone = "America/Indiana/Indianapolis"
+root-password-hashed = "$6$REPLACE_WITH_SHA512_CRYPT_HASH"
+root-ssh-keys = [
+  "REPLACE_WITH_TURNERANS_SVC_PUBLIC_KEY"
+]
+
+[network]
+source = "from-dhcp"
+
+[disk-setup]
+filesystem = "ext4"
+lvm.swapsize = 0
+lvm.maxvz = 0
+disk-list = ["sda"]
+
+[first-boot]
+source = "from-iso"
+ordering = "network-online"

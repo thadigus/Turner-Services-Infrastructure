@@ -9,6 +9,12 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SENSITIVE_DIR="${REPO_ROOT}/turner-services-sensitive-repo"
 SECRETS_DIR="${REPO_ROOT}/.secrets"
 VAULT="${VAULT:-Turner-Services-Infra}"
+PBS_ONLY=0
+if [[ "${1:-}" == "--pbs-only" ]]; then
+  PBS_ONLY=1
+  shift
+fi
+[[ $# -eq 0 ]] || { echo "Usage: $0 [--pbs-only]" >&2; exit 2; }
 
 die() { echo "Error: $*" >&2; exit 1; }
 
@@ -63,6 +69,64 @@ ensure_login() {
   "${cmd[@]}" >/dev/null
 }
 
+get_item_field() {
+  local title="$1" field="$2"
+  pass-cli item view --vault-name "$VAULT" --item-title "$title" --field "$field"
+}
+
+ensure_pbs_autoinstall_items() {
+  local answer_title="ts-pbs-autoinstall-answer"
+  local root_title="ts-pbs-root"
+  if item_exists "$answer_title"; then
+    echo "skip (exists): $answer_title"
+    return 0
+  fi
+
+  [[ -f "${SENSITIVE_DIR}/turnerans_svc_id_rsa.pub" ]] || die "missing PBS root SSH public key: ${SENSITIVE_DIR}/turnerans_svc_id_rsa.pub"
+  command -v openssl >/dev/null 2>&1 || die "openssl required to generate PBS root password hash"
+
+  local root_password root_hash pubkey answer_file
+  if item_exists "$root_title"; then
+    echo "reuse (exists): $root_title"
+    root_password="$(get_item_field "$root_title" password)"
+  else
+    root_password="$(openssl rand -base64 36 | tr -d '\n')"
+    ensure_login "$root_title" root "$root_password" "https://pbs.turnerservices.cloud:8007"
+  fi
+  root_hash="$(printf '%s\n' "$root_password" | openssl passwd -6 -stdin)"
+  pubkey="$(tr -d '\r\n' < "${SENSITIVE_DIR}/turnerans_svc_id_rsa.pub")"
+  answer_file="$(mktemp)"
+
+  cat > "$answer_file" <<EOF_PBS_ANSWER
+[global]
+keyboard = "en-us"
+country = "us"
+fqdn = "pbs-primary-01.turnerservices.cloud"
+mailto = "admin@turnerservices.cloud"
+timezone = "America/Indiana/Indianapolis"
+root-password-hashed = "$root_hash"
+root-ssh-keys = [
+  "$pubkey"
+]
+
+[network]
+source = "from-dhcp"
+
+[disk-setup]
+filesystem = "ext4"
+lvm.swapsize = 0
+lvm.maxvz = 0
+disk-list = ["sda"]
+
+[first-boot]
+source = "from-iso"
+ordering = "network-online"
+EOF_PBS_ANSWER
+
+  ensure_note_from_file "$answer_title" "$answer_file"
+  rm -f "$answer_file"
+}
+
 prompt_secret() {
   local var="$1" label="$2" val="${!1:-}"
   if [[ -z "$val" ]]; then
@@ -86,6 +150,13 @@ prompt_value() {
   printf '%s' "$val"
 }
 
+if (( PBS_ONLY )); then
+  ensure_pbs_autoinstall_items
+  echo
+  echo "Vault $VAULT updated with PBS autoinstall items. Next: ./scripts/bootstrap-secrets.sh"
+  exit 0
+fi
+
 # File-backed items
 ensure_note_from_file ts-turneradmin-ssh-privkey   "${SENSITIVE_DIR}/turneradmin_id_rsa"
 ensure_note_from_file ts-turnerans_svc-ssh-privkey "${SENSITIVE_DIR}/turnerans_svc_id_rsa"
@@ -97,6 +168,7 @@ if [[ -f "${extra_seed_hook}" ]]; then
   # shellcheck source=/dev/null
   source "${extra_seed_hook}"
 fi
+ensure_pbs_autoinstall_items
 
 # Credential items (prompted unless TS_* is exported)
 need_creds=0

@@ -8,6 +8,7 @@ Per-workload IaC. Two flavours live here:
 ## Layout
 
 - `github-runner-vm/` — GitHub Actions runner VM configuration.
+- `proxmox-backup-server/` — Proxmox Backup Server VM configuration.
 - `synology-nfs/` — Synology shared folder and NFS export management.
 - `k8s-cluster/production/` — production K8s cluster (3 hybrid control + 2 workers, HA via kube-vip 10.0.3.5).
 - `k8s-cluster/test/` — test K8s cluster (1 control + 1 worker, kube-vip 10.0.3.10).
@@ -20,6 +21,7 @@ Per-workload IaC. Two flavours live here:
 | Workload | Hostname pattern |
 | --- | --- |
 | GitHub runners | `gha-runner-*` |
+| Proxmox Backup Server | `pbs-primary-*` |
 | Prod K8s control | `k8s-control-*` |
 | Prod K8s workers | `k8s-worker-*` |
 | Test K8s control | `k8s-test-control-*` |
