@@ -24,3 +24,9 @@ Add or update workload-specific Helmfile releases, values, docs, and restore hel
 ## CI
 
 The public workflow is `.github/workflows/environment-converge.yml`. It checks out the sensitive submodule, prepares credentials through the sensitive CI hook, and runs `scripts/run-k8s-app.sh` against the private catalog.
+
+## Forgejo Runner
+
+Forgejo is deployed from the private catalog with PostgreSQL on the `nfs-appcloud` storage class and a Kubernetes-hosted Forgejo Actions runner. The runner uses a Docker-in-Docker sidecar for workflow containers, so the `forgejo` namespace is intentionally privileged. The production hostname is sourced from UniFi DNS in `server-list-prod.yml`; do not add public DNS records for it.
+
+Bootstrap requires `forgejo-db-password.txt`, `forgejo-secret-key.txt`, and `forgejo-internal-token.txt` from the matching `ts-forgejo-*` Proton Pass notes. Runner registration is optional for the first app deploy: after creating a runner in Forgejo, store its UUID and token as `forgejo-runner-uuid.txt` and `forgejo-runner-token.txt` or as the `ts-forgejo-runner` login item, then rerun `scripts/run-k8s-app.sh bootstrap --env <env>` to create the runner config secret.

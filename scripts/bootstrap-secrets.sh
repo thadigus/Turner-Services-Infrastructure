@@ -56,6 +56,9 @@ fi
 
 ensure_secret_file "${SECRETS_DIR}/cloudflare-dns01-token.txt" ts-cloudflare-dns01-token note
 ensure_secret_file "${SECRETS_DIR}/cluster-login-password.txt" ts-code-server-password note
+ensure_secret_file "${SECRETS_DIR}/forgejo-db-password.txt" ts-forgejo-db-password note
+ensure_secret_file "${SECRETS_DIR}/forgejo-secret-key.txt" ts-forgejo-secret-key note
+ensure_secret_file "${SECRETS_DIR}/forgejo-internal-token.txt" ts-forgejo-internal-token note
 
 pbs_answer_hook="${REPO_ROOT}/turner-services-sensitive-repo/ci/materialize-pbs-answer.sh"
 if [[ -x "${pbs_answer_hook}" ]]; then
@@ -101,6 +104,11 @@ export TS_NEXTCLOUD_DB_PASSWORD_FILE="${SECRETS_DIR}/nextcloud-db-password.txt"
 export TS_NEXTCLOUD_ADMIN_USER_FILE="${SECRETS_DIR}/nextcloud-admin-user.txt"
 export TS_NEXTCLOUD_ADMIN_PASSWORD_FILE="${SECRETS_DIR}/nextcloud-admin-password.txt"
 export TS_CODER_POSTGRES_PASSWORD_FILE="${SECRETS_DIR}/coder-postgres-password.txt"
+export TS_FORGEJO_DB_PASSWORD_FILE="${SECRETS_DIR}/forgejo-db-password.txt"
+export TS_FORGEJO_SECRET_KEY_FILE="${SECRETS_DIR}/forgejo-secret-key.txt"
+export TS_FORGEJO_INTERNAL_TOKEN_FILE="${SECRETS_DIR}/forgejo-internal-token.txt"
+export TS_FORGEJO_RUNNER_UUID_FILE="${SECRETS_DIR}/forgejo-runner-uuid.txt"
+export TS_FORGEJO_RUNNER_TOKEN_FILE="${SECRETS_DIR}/forgejo-runner-token.txt"
 export TS_GRAFANA_ADMIN_PASSWORD_FILE="${SECRETS_DIR}/grafana-admin-password.txt"
 export TS_GRAFANA_ADMIN_USER=$(shq "${GRAFANA_ADMIN_USER}")
 export PBS_AUTOINSTALL_ANSWER_FILE="${REPO_ROOT}/turner-services-sensitive-repo/proxmox-backup-server/answer.toml"
