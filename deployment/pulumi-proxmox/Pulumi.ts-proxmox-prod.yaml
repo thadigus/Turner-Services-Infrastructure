@@ -1,4 +1,4 @@
 config:
   ts-proxmox:serverListPath: ../../turner-services-sensitive-repo/server-list-prod.yml
   ts-proxmox:environment: production
-  proxmox:endpoint: https://10.0.2.14:8006
+  proxmox:endpoint: https://10.0.2.13:8006
