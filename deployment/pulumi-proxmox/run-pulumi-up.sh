@@ -199,7 +199,7 @@ for target in "${targets[@]}"; do
   run_pulumi config set serverListPath "${server_list}" --stack "${stack}"
   run_pulumi config set environment "${environment}" --stack "${stack}"
   if [[ "${MODE}" == "up" ]]; then
-    pulumi_output_file="$(mktemp --suffix=.pulumi-up.log)"
+    pulumi_output_file="$(mktemp "${TMPDIR:-/tmp}/pulumi-up.log.XXXXXX")"
     run_pulumi "${MODE}" --stack "${stack}" --yes --color always | tee "${pulumi_output_file}"
     mapfile -t changed_hosts < <(collect_meaningfully_changed_vms "${pulumi_output_file}")
     rm -f "${pulumi_output_file}"
